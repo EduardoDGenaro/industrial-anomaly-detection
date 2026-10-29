@@ -10,7 +10,7 @@ project:
 
 dataset:
   name: "mvtec"
-  root: "./data/mvtec_anomaly_detection"
+  root: "./data/mvtec"
   category: "bottle" # default category (bottle, screw, transistor, etc.)
   image_size: [256, 256]
   train_batch_size: 32

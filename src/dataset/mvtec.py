@@ -1,17 +1,30 @@
-"""MVTec Anomaly Detection (MVTec AD) Dataset Loader and Parser.
+"""MVTec Anomaly Detection (MVTec AD) Dataset Loader, Parser and Validator.
 
-This module provides an industrial-grade dataset parser, PyTorch Dataset wrapper,
-and automated download utilities for the 15 categories of the MVTec AD benchmark.
+Provides:
+- Category constants for the 15 MVTec AD classes.
+- ``validate_category``: integrity check (official counts, 1:1 image/mask pairing).
+- ``extract_archive``: safe local extraction of an official ``<category>.tar.xz``
+  or a Kaggle ``.zip`` (path-traversal protected).
+- ``MVTecDataset``: unsupervised-paradigm dataset (train = only ``good``).
+
+Data acquisition (the official MVTec mirror requires accepting the license form,
+so it cannot be automated):
+- Kaggle mirror:  ``python scripts/download_kaggle.py --category bottle``
+- Manual:         download ``bottle.tar.xz`` from
+                  https://www.mvtec.com/company/research/datasets/mvtec-ad/downloads
+                  then ``python -m src.dataset.mvtec --category bottle --archive data/bottle.tar.xz``
+
+License: MVTec AD is CC BY-NC-SA 4.0 (non-commercial use).
 """
 
 from __future__ import annotations
 
-import os
+import argparse
 import tarfile
-import urllib.request
-from dataclasses import dataclass
+import zipfile
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from PIL import Image
@@ -40,9 +53,18 @@ MVTEC_OBJECTS: Tuple[str, ...] = (
 
 MVTEC_CATEGORIES: Tuple[str, ...] = MVTEC_TEXTURES + MVTEC_OBJECTS
 
-MVTEC_DOWNLOAD_URL: str = (
-    "https://www.mydrive.ch/shares/38536/3830184030e49c74741a77d64795a35f/download/420938113-1629952094/{category}.tar.xz"
-)
+MVTEC_OFFICIAL_PAGE: str = "https://www.mvtec.com/company/research/datasets/mvtec-ad/downloads"
+
+# Official image counts per split/defect (used for integrity validation).
+# Extend as new pilot categories are onboarded.
+MVTEC_EXPECTED_COUNTS: Dict[str, Dict[str, Dict[str, int]]] = {
+    "bottle": {
+        "train": {"good": 209},
+        "test": {"good": 20, "broken_large": 20, "broken_small": 22, "contamination": 21},
+    },
+}
+
+IMAGE_EXTENSIONS: Tuple[str, ...] = (".png", ".jpg", ".jpeg", ".bmp")
 
 
 @dataclass
@@ -57,66 +79,171 @@ class MVTecSample:
     label: int  # 0 for normal/good, 1 for anomalous
 
 
-def download_and_extract_mvtec(
-    category: str,
-    root_dir: Union[str, Path] = "./data/mvtec_anomaly_detection",
-    force_download: bool = False,
-) -> Path:
-    """Download and extract a specific MVTec AD category archive.
+@dataclass
+class ValidationReport:
+    """Result of a category integrity validation."""
 
-    Args:
-        category: Name of the category (e.g. 'bottle', 'screw').
-        root_dir: Target root directory for storage.
-        force_download: Whether to re-download even if folder exists.
+    category: str
+    counts: Dict[str, Dict[str, int]] = field(default_factory=dict)
+    num_masks: int = 0
+    errors: List[str] = field(default_factory=list)
 
-    Returns:
-        Path to the extracted category directory.
+    @property
+    def ok(self) -> bool:
+        return not self.errors
+
+    def summary(self) -> str:
+        lines = [f"[VALIDATION] category='{self.category}'"]
+        for split, per_defect in self.counts.items():
+            for defect, n in sorted(per_defect.items()):
+                lines.append(f"   {split:<5} / {defect:<15} {n:>4} images")
+        lines.append(f"   ground_truth masks       {self.num_masks:>4}")
+        if self.ok:
+            lines.append("[VALIDATION] OK - integrity checks passed.")
+        else:
+            lines.append(f"[VALIDATION] FAILED - {len(self.errors)} problem(s):")
+            lines.extend(f"   - {e}" for e in self.errors[:20])
+        return "\n".join(lines)
+
+
+def _list_images(folder: Path) -> List[Path]:
+    if not folder.exists():
+        return []
+    return sorted(p for p in folder.iterdir() if p.suffix.lower() in IMAGE_EXTENSIONS)
+
+
+def validate_category(root_dir: Union[str, Path], category: str) -> ValidationReport:
+    """Validate the on-disk structure and integrity of an MVTec AD category.
+
+    Checks: required folders exist, official image counts (when known), every
+    anomalous test image has exactly one ground-truth mask, no orphan masks,
+    and train contains only ``good`` samples.
     """
+    root = Path(root_dir).resolve()
+    cat_dir = root / category
+    report = ValidationReport(category=category)
+
     if category not in MVTEC_CATEGORIES:
-        raise ValueError(
-            f"Invalid category '{category}'. Must be one of: {MVTEC_CATEGORIES}"
+        report.errors.append(f"Unknown category '{category}'.")
+        return report
+    for sub in ("train", "test", "ground_truth"):
+        if not (cat_dir / sub).is_dir():
+            report.errors.append(f"Missing folder: {cat_dir / sub}")
+    if report.errors:
+        return report
+
+    for split in ("train", "test"):
+        report.counts[split] = {
+            d.name: len(_list_images(d)) for d in sorted((cat_dir / split).iterdir()) if d.is_dir()
+        }
+
+    train_defects = set(report.counts["train"]) - {"good"}
+    if train_defects:
+        report.errors.append(f"train/ must contain only 'good', found: {sorted(train_defects)}")
+
+    expected = MVTEC_EXPECTED_COUNTS.get(category)
+    if expected:
+        for split, per_defect in expected.items():
+            for defect, n_exp in per_defect.items():
+                n_got = report.counts.get(split, {}).get(defect, 0)
+                if n_got != n_exp:
+                    report.errors.append(f"{split}/{defect}: expected {n_exp} images, found {n_got}")
+
+    # 1:1 image <-> mask pairing for anomalous test images
+    gt_dir = cat_dir / "ground_truth"
+    for defect in report.counts["test"]:
+        if defect == "good":
+            continue
+        images = _list_images(cat_dir / "test" / defect)
+        masks = _list_images(gt_dir / defect)
+        report.num_masks += len(masks)
+        img_stems = {p.stem for p in images}
+        mask_stems = {p.stem.removesuffix("_mask") for p in masks}
+        for stem in sorted(img_stems - mask_stems):
+            report.errors.append(f"Missing mask for test/{defect}/{stem}")
+        for stem in sorted(mask_stems - img_stems):
+            report.errors.append(f"Orphan mask ground_truth/{defect}/{stem}_mask")
+
+    return report
+
+
+def _is_within(base: Path, target: Path) -> bool:
+    try:
+        target.resolve().relative_to(base.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def extract_archive(archive: Union[str, Path], root_dir: Union[str, Path], category: str) -> Path:
+    """Safely extract a category archive (.tar.xz from MVTec, or .zip from Kaggle).
+
+    Only members belonging to ``category/`` are extracted. Members that would
+    escape ``root_dir`` (path traversal) are rejected.
+    """
+    archive = Path(archive)
+    root = Path(root_dir).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    if not archive.exists():
+        raise FileNotFoundError(
+            f"Archive not found: {archive}. Download it from {MVTEC_OFFICIAL_PAGE} "
+            "or use scripts/download_kaggle.py."
         )
 
-    root = Path(root_dir).resolve()
-    target_dir = root / category
+    def _wanted(name: str) -> Optional[str]:
+        # Accept 'bottle/...' or 'mvtec_anomaly_detection/bottle/...'
+        parts = Path(name).parts
+        if category in parts:
+            idx = parts.index(category)
+            return str(Path(*parts[idx:]))
+        return None
 
-    if target_dir.exists() and not force_download:
-        # Check if train and test folders exist
-        if (target_dir / "train").exists() and (target_dir / "test").exists():
-            return target_dir
+    if archive.suffix == ".zip":
+        with zipfile.ZipFile(archive) as zf:
+            for info in zf.infolist():
+                rel = _wanted(info.filename)
+                if rel is None or info.is_dir():
+                    continue
+                dest = root / rel
+                if not _is_within(root, dest):
+                    raise RuntimeError(f"Unsafe path in archive: {info.filename}")
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(info) as src, open(dest, "wb") as dst:
+                    dst.write(src.read())
+    else:
+        with tarfile.open(archive, "r:*") as tar:
+            for member in tar.getmembers():
+                rel = _wanted(member.name)
+                if rel is None or not member.isfile():
+                    continue
+                dest = root / rel
+                if not _is_within(root, dest):
+                    raise RuntimeError(f"Unsafe path in archive: {member.name}")
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                src = tar.extractfile(member)
+                if src is None:
+                    continue
+                with src, open(dest, "wb") as dst:
+                    dst.write(src.read())
 
-    root.mkdir(parents=True, exist_ok=True)
-    archive_path = root / f"{category}.tar.xz"
-    url = MVTEC_DOWNLOAD_URL.format(category=category)
+    return root / category
 
-    print(f"[INFO] Downloading MVTec AD category '{category}' from official source...")
-    try:
-        urllib.request.urlretrieve(url, archive_path)
-    except Exception as exc:
-        raise RuntimeError(
-            f"Failed to download MVTec AD category '{category}' from {url}. "
-            "Please check network connection or manually place files in 'data/'."
-        ) from exc
 
-    print(f"[INFO] Extracting archive: {archive_path}...")
-    with tarfile.open(archive_path, "r:xz") as tar:
-        tar.extractall(path=root)
-
-    # Clean up archive file after extraction
-    if archive_path.exists():
-        archive_path.unlink()
-
-    print(f"[INFO] Successfully prepared category '{category}' at {target_dir}")
-    return target_dir
+def load_mask(mask_path: Optional[Path], size_hw: Tuple[int, int]) -> np.ndarray:
+    """Load a binary mask {0,1} resized (nearest) to (H, W); zeros if no mask."""
+    if mask_path is None or not Path(mask_path).exists():
+        return np.zeros(size_hw, dtype=np.uint8)
+    with Image.open(mask_path) as m:
+        m = m.convert("L").resize((size_hw[1], size_hw[0]), Image.NEAREST)
+        return (np.asarray(m) > 127).astype(np.uint8)
 
 
 class MVTecDataset:
-    """PyTorch-compatible dataset for MVTec Anomaly Detection.
+    """Dataset for MVTec Anomaly Detection (unsupervised paradigm).
 
-    Adheres strictly to the unsupervised learning paradigm:
     - 'train' split loads ONLY normal samples ('good').
-    - 'test' split loads both normal ('good') and anomalous samples with ground-truth masks.
-    - Does NOT apply destructive texturing transforms (CutOut, Salt&Pepper, heavy noise).
+    - 'test' split loads normal and anomalous samples with ground-truth masks.
+    - Does NOT apply destructive texture transforms (CutOut, Salt&Pepper, heavy noise).
     """
 
     def __init__(
@@ -128,20 +255,8 @@ class MVTecDataset:
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
     ) -> None:
-        """Initialize the MVTecDataset.
-
-        Args:
-            root_dir: Path to directory containing MVTec category folders.
-            category: One of the 15 MVTec AD classes.
-            split: 'train' or 'test'.
-            image_size: Target (height, width) for resizing.
-            transform: Callable transform for RGB images.
-            target_transform: Callable transform for binary segmentation masks.
-        """
         if category not in MVTEC_CATEGORIES:
-            raise ValueError(
-                f"Unknown category '{category}'. Available: {MVTEC_CATEGORIES}"
-            )
+            raise ValueError(f"Unknown category '{category}'. Available: {MVTEC_CATEGORIES}")
         if split not in ("train", "test"):
             raise ValueError(f"Split must be 'train' or 'test', got '{split}'.")
 
@@ -156,94 +271,49 @@ class MVTecDataset:
         self.samples: List[MVTecSample] = self._index_dataset()
 
     def _index_dataset(self) -> List[MVTecSample]:
-        """Index images and ground truth masks from the filesystem."""
         samples: List[MVTecSample] = []
         split_dir = self.category_dir / self.split
         gt_dir = self.category_dir / "ground_truth"
-
         if not split_dir.exists():
-            # Return empty if directory not populated yet (e.g. prior to download)
             return samples
 
-        # In 'train', strictly index 'good' (normal)
-        if self.split == "train":
-            good_dir = split_dir / "good"
-            if good_dir.exists():
-                for img_path in sorted(good_dir.glob("*.png")):
-                    samples.append(
-                        MVTecSample(
-                            image_path=img_path,
-                            mask_path=None,
-                            category=self.category,
-                            split="train",
-                            defect_type="good",
-                            label=0,
-                        )
+        defect_dirs = [split_dir / "good"] if self.split == "train" else sorted(
+            d for d in split_dir.iterdir() if d.is_dir()
+        )
+        for defect_dir in defect_dirs:
+            defect_type = defect_dir.name
+            is_anomalous = defect_type != "good"
+            for img_path in _list_images(defect_dir):
+                mask_path: Optional[Path] = None
+                if is_anomalous:
+                    candidate = gt_dir / defect_type / f"{img_path.stem}_mask.png"
+                    mask_path = candidate if candidate.exists() else None
+                samples.append(
+                    MVTecSample(
+                        image_path=img_path,
+                        mask_path=mask_path,
+                        category=self.category,
+                        split=self.split,
+                        defect_type=defect_type,
+                        label=int(is_anomalous),
                     )
-        else:
-            # In 'test', index all subdirectories (good + defect types)
-            for defect_dir in sorted(split_dir.iterdir()):
-                if not defect_dir.is_dir():
-                    continue
-                defect_type = defect_dir.name
-                is_anomalous = defect_type != "good"
-                label = 1 if is_anomalous else 0
-
-                for img_path in sorted(defect_dir.glob("*.png")):
-                    mask_path: Optional[Path] = None
-                    if is_anomalous and gt_dir.exists():
-                        # GT mask filename typically matches <stem>_mask.png
-                        expected_mask = gt_dir / defect_type / f"{img_path.stem}_mask.png"
-                        if expected_mask.exists():
-                            mask_path = expected_mask
-
-                    samples.append(
-                        MVTecSample(
-                            image_path=img_path,
-                            mask_path=mask_path,
-                            category=self.category,
-                            split="test",
-                            defect_type=defect_type,
-                            label=label,
-                        )
-                    )
-
+                )
         return samples
 
     def __len__(self) -> int:
         return len(self.samples)
 
     def __getitem__(self, idx: int) -> Dict[str, Union[np.ndarray, str, int]]:
-        """Fetch item at index.
-
-        Returns:
-            Dict containing:
-                - 'image': RGB image array shaped (H, W, 3) normalized [0, 1]
-                - 'mask': Binary ground-truth mask shaped (H, W) in {0, 1}
-                - 'label': Int 0 (normal) or 1 (anomalous)
-                - 'defect_type': String identifier of defect
-                - 'image_path': String absolute path to image
-        """
+        """Return dict with 'image' (H,W,3 float [0,1]), 'mask' (H,W float {0,1}),
+        'label', 'defect_type', 'image_path'."""
         sample = self.samples[idx]
+        h, w = self.image_size
 
-        # Load RGB image
         with Image.open(sample.image_path) as pil_img:
-            pil_img = pil_img.convert("RGB")
-            if self.image_size:
-                pil_img = pil_img.resize(self.image_size, Image.BILINEAR)
-            img_array = np.array(pil_img, dtype=np.float32) / 255.0
+            pil_img = pil_img.convert("RGB").resize((w, h), Image.BILINEAR)
+            img_array = np.asarray(pil_img, dtype=np.float32) / 255.0
 
-        # Load or synthesize Ground Truth Mask
-        if sample.mask_path and sample.mask_path.exists():
-            with Image.open(sample.mask_path) as pil_mask:
-                pil_mask = pil_mask.convert("L")
-                if self.image_size:
-                    pil_mask = pil_mask.resize(self.image_size, Image.NEAREST)
-                mask_array = (np.array(pil_mask, dtype=np.float32) > 127).astype(np.float32)
-        else:
-            # Normal sample: mask is all zeros
-            h, w = self.image_size if self.image_size else (img_array.shape[0], img_array.shape[1])
-            mask_array = np.zeros((h, w), dtype=np.float32)
+        mask_array = load_mask(sample.mask_path, (h, w)).astype(np.float32)
 
         if self.transform is not None:
             img_array = self.transform(img_array)
@@ -258,3 +328,22 @@ class MVTecDataset:
             "image_path": str(sample.image_path),
         }
 
+
+def _cli() -> int:
+    parser = argparse.ArgumentParser(description="Extract and/or validate an MVTec AD category.")
+    parser.add_argument("--category", required=True, choices=MVTEC_CATEGORIES)
+    parser.add_argument("--root", default="data/mvtec")
+    parser.add_argument("--archive", default=None, help="Local .tar.xz (official) or .zip (Kaggle) to extract.")
+    args = parser.parse_args()
+
+    if args.archive:
+        print(f"[INFO] Extracting '{args.category}' from {args.archive} ...")
+        extract_archive(args.archive, args.root, args.category)
+
+    report = validate_category(args.root, args.category)
+    print(report.summary())
+    return 0 if report.ok else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(_cli())

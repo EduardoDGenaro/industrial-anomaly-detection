@@ -1,16 +1,19 @@
 """Industrial Anomaly Detection - Streamlit Inspection & Calibration UI.
 
 Interactive operational dashboard for Quality Assurance engineers to:
-1. Inspect manufactured parts in real-time.
-2. Adjust and calibrate operational decision thresholds.
-3. Balance asymmetric industrial costs: Cost(FN) vs Cost(FP).
-4. Evaluate thermal heatmaps, bounding boxes, and morphological filters.
+1. Load real trained PatchCore models (from weights/patchcore_<category>.pt).
+2. Inspect real manufactured parts from MVTec AD test set or upload new images.
+3. Perform real-time inference with thermal heatmap overlay and bounding boxes.
+4. Calibrate operational decision thresholds based on industrial asymmetric costs.
 """
 
 from __future__ import annotations
 
+import json
 import sys
+import time
 from pathlib import Path
+from typing import List, Optional
 
 # Add project root to path for direct invocation
 root_path = Path(__file__).resolve().parent.parent
@@ -19,14 +22,18 @@ if str(root_path) not in sys.path:
 
 import cv2
 import numpy as np
+from PIL import Image
 import streamlit as st
 
-from src.dataset.mvtec import MVTEC_CATEGORIES, MVTEC_OBJECTS, MVTEC_TEXTURES
+from src.dataset.mvtec import IMAGE_EXTENSIONS, MVTEC_CATEGORIES, load_mask
+from src.models.patchcore_wrapper import (
+    PatchCoreInferenceEngine,
+    load_rgb,
+    preprocess_mask,
+    resize_center_crop,
+)
 from src.postprocessing.postprocessor import AnomalyPostProcessor
 from src.utils.metrics import (
-    compute_image_auroc,
-    compute_pixel_auroc,
-    compute_pro_metric,
     find_cost_sensitive_threshold,
     find_f1_optimal_threshold,
 )
@@ -43,11 +50,31 @@ st.set_page_config(
 
 st.title("🏭 Industrial Anomaly Detection - Quality Assurance Console")
 st.caption(
-    "Inspeção Visual e Detecção de Falhas Não Supervisionada em Linhas de Produção | Benchmark: MVTec AD"
+    "Inspeção Visual e Detecção de Falhas Não Supervisionada em Linhas de Produção | MVTec AD Pilot"
 )
 
+
 # -----------------------------------------------------------------------------
-# Sidebar: Configuration & Calibration Sliders
+# Cached Loaders
+# -----------------------------------------------------------------------------
+@st.cache_resource
+def load_trained_model(weights_path: str) -> Optional[PatchCoreInferenceEngine]:
+    p = Path(weights_path)
+    if not p.exists():
+        return None
+    return PatchCoreInferenceEngine.load(p, device="cpu")
+
+
+def load_benchmark_report(category: str) -> Optional[dict]:
+    p = Path(f"docs/benchmark_{category}.json")
+    if p.exists():
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return None
+
+
+# -----------------------------------------------------------------------------
+# Sidebar Configuration
 # -----------------------------------------------------------------------------
 st.sidebar.header("⚙️ Configurações de Inspeção")
 
@@ -58,11 +85,19 @@ category = st.sidebar.selectbox(
     help="Selecione uma das 15 classes industriais do benchmark.",
 )
 
-model_backbone = st.sidebar.selectbox(
-    "Backbone de Extração:",
-    options=["WideResNet-50-2 (PatchCore)", "DINOv2-ViT-S/14", "ResNet-18"],
-    index=0,
-)
+weights_file = f"weights/patchcore_{category}.pt"
+model = load_trained_model(weights_file)
+benchmark = load_benchmark_report(category)
+
+if model is not None:
+    calib = model.calibration
+    default_th = float(calib.get("image_threshold", 0.45))
+    st.sidebar.success(f"✅ Modelo Carregado: `{weights_file}`")
+    st.sidebar.caption(f"Backbone: **{model.config.backbone}** | Coreset: **{model.memory_bank.shape[0]} vetores**")
+else:
+    default_th = 0.45
+    st.sidebar.warning(f"⚠️ Modelo `{weights_file}` não encontrado.")
+    st.sidebar.caption("Execute `python scripts/train.py` para gerar os pesos.")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎯 Calibração de Threshold")
@@ -70,8 +105,8 @@ st.sidebar.subheader("🎯 Calibração de Threshold")
 threshold = st.sidebar.slider(
     "Limiar Operacional (Threshold τ):",
     min_value=0.05,
-    max_value=0.95,
-    value=0.45,
+    max_value=2.50,
+    value=min(default_th, 2.50),
     step=0.01,
     help="Valores de anomalia acima deste limiar rejeitam a peça.",
 )
@@ -85,9 +120,9 @@ use_hysteresis = st.sidebar.checkbox(
 if use_hysteresis:
     hyst_low = st.sidebar.slider(
         "Histerese Low Threshold:",
-        min_value=0.05,
+        min_value=0.01,
         max_value=threshold,
-        value=max(0.05, round(threshold * 0.7, 2)),
+        value=max(0.01, round(threshold * 0.70, 2)),
         step=0.01,
     )
 else:
@@ -96,14 +131,14 @@ else:
 st.sidebar.markdown("---")
 st.sidebar.subheader("💰 Matriz de Custo Industrial")
 cost_fn = st.sidebar.number_input(
-    "Custo de Falso Negativo (C_FN - Peça defeituosa que escapa):",
+    "Custo de Falso Negativo (C_FN - Escape de peça defeituosa):",
     min_value=10.0,
     max_value=100000.0,
     value=10000.0,
     step=100.0,
 )
 cost_fp = st.sidebar.number_input(
-    "Custo de Falso Positivo (C_FP - Descarte / reinspeção):",
+    "Custo de Falso Positivo (C_FP - Reinspeção/Descarte):",
     min_value=0.1,
     max_value=500.0,
     value=1.0,
@@ -117,153 +152,177 @@ opening_k = st.sidebar.slider("Abertura Morfológica (Kernel):", 1, 9, 3, 2)
 closing_k = st.sidebar.slider("Fechamento Morfológico (Kernel):", 1, 11, 5, 2)
 
 # -----------------------------------------------------------------------------
-# Top Metric KPI Cards
+# Top Metric KPI Cards (Real measured from benchmark if available)
 # -----------------------------------------------------------------------------
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    st.metric(label="Meta Image-AUROC", value="≥ 99.0%", delta="+1.5% vs baseline")
+    if benchmark:
+        val = f"{benchmark['metrics']['image_auroc'] * 100:.1f}%"
+        delta = "Real Medido"
+    else:
+        val = "≥ 99.0%"
+        delta = "Meta SLA"
+    st.metric(label="Image-AUROC", value=val, delta=delta)
+
 with col2:
-    st.metric(label="Meta Pixel-AUROC", value="≥ 97.5%", delta="+1.5% vs baseline")
+    if benchmark:
+        val = f"{benchmark['metrics']['pixel_auroc'] * 100:.1f}%"
+        delta = "Real Medido"
+    else:
+        val = "≥ 97.5%"
+        delta = "Meta SLA"
+    st.metric(label="Pixel-AUROC", value=val, delta=delta)
+
 with col3:
-    st.metric(label="Meta PRO Metric", value="≥ 93.5%", delta="FPR ≤ 0.30")
+    if benchmark:
+        val = f"{benchmark['metrics']['pro_metric_fpr_030'] * 100:.1f}%"
+        delta = "FPR ≤ 0.30"
+    else:
+        val = "≥ 93.5%"
+        delta = "Meta SLA"
+    st.metric(label="PRO Metric", value=val, delta=delta)
+
 with col4:
-    st.metric(label="Latência SLA (P95)", value="< 50 ms", delta="32 ms medido (GPU)")
+    if benchmark:
+        val = f"{benchmark['latency']['mean_ms']:.1f} ms"
+        delta = f"P95: {benchmark['latency']['p95_ms']:.1f} ms"
+    else:
+        val = "< 50 ms"
+        delta = "Meta Edge"
+    st.metric(label="Latência Média", value=val, delta=delta)
 
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# Inspection View Simulator / Reader
+# Image Selection (Real MVTec Dataset or Upload)
 # -----------------------------------------------------------------------------
-st.subheader(f"🔍 Inspeção em Tempo Real: `{category}`")
+st.subheader(f"🔍 Inspeção de Peças: `{category}`")
 
-sample_type = st.radio(
-    "Amostra a Inspecionar:",
-    options=["Peça com Defeito (Rachadura/Contaminação)", "Peça Normal (Aprovada)"],
-    horizontal=True,
-)
+data_dir = Path("data/mvtec") / category / "test"
+tab1, tab2 = st.tabs(["📁 Dataset MVTec AD (Amostras Reais)", "📤 Upload de Nova Imagem"])
 
-# Generate or load interactive inspection data
-img_size = (256, 256)
-np.random.seed(42 if sample_type.startswith("Peça com Defeito") else 7)
+selected_img_path: Optional[Path] = None
+uploaded_image: Optional[Image.Image] = None
+gt_mask_path: Optional[Path] = None
+selected_defect_type = "unknown"
 
-# Synthetic realistic inspection visual
-base_color = 0.7 if category in MVTEC_OBJECTS else 0.4
-img_synth = np.ones((img_size[0], img_size[1], 3), dtype=np.float32) * base_color
-# Add texture/object structure
-for i in range(10):
-    cv2.circle(img_synth, (25 * i + 15, 128), 12, (base_color - 0.1, base_color - 0.1, base_color - 0.05), -1)
+with tab1:
+    if data_dir.exists():
+        defect_folders = sorted(p for p in data_dir.iterdir() if p.is_dir())
+        options_map = {}
+        for folder in defect_folders:
+            imgs = sorted(p for p in folder.iterdir() if p.suffix.lower() in IMAGE_EXTENSIONS)
+            for img in imgs:
+                label_display = f"[{folder.name.upper()}] - {img.name}"
+                options_map[label_display] = (img, folder.name)
 
-# Raw anomaly heatmap synthesis
-raw_anomaly = np.zeros(img_size, dtype=np.float32)
-
-if sample_type.startswith("Peça com Defeito"):
-    # Create defect scratch / hole in anomaly map
-    cv2.line(raw_anomaly, (70, 80), (160, 170), 0.85, thickness=5)
-    cv2.circle(raw_anomaly, (120, 130), 14, 0.95, -1)
-    gt_mask = (raw_anomaly > 0.5).astype(np.uint8)
-    simulated_score = 0.82
-    defect_name = "scratch_and_puncture"
-else:
-    # Minimal sensor background noise
-    raw_anomaly = np.random.uniform(0.01, 0.12, img_size).astype(np.float32)
-    gt_mask = np.zeros(img_size, dtype=np.uint8)
-    simulated_score = 0.11
-    defect_name = "good"
-
-# Apply post-processor
-post_processor = AnomalyPostProcessor(
-    blur_sigma=blur_sigma,
-    opening_kernel_size=opening_k,
-    closing_kernel_size=closing_k,
-)
-
-smoothed_map = post_processor.smooth_anomaly_map(raw_anomaly)
-norm_map = post_processor.normalize_anomaly_map(smoothed_map, min_val=0.0, max_val=1.0)
-
-if use_hysteresis:
-    binary_mask = post_processor.apply_hysteresis_threshold(
-        norm_map, high_threshold=threshold, low_threshold=hyst_low
-    )
-else:
-    binary_mask = (norm_map >= threshold).astype(np.uint8) * 255
-
-filtered_mask = post_processor.filter_morphology(binary_mask)
-defect_regions = post_processor.extract_defect_regions(filtered_mask, norm_map)
-blended_overlay = post_processor.create_heatmap_overlay(img_synth, norm_map, alpha=0.45)
-
-# Production Decision
-is_rejected = simulated_score >= threshold or len(defect_regions) > 0
-
-decision_col, details_col = st.columns([1, 2])
-with decision_col:
-    if is_rejected:
-        st.error(f"❌ DECISÃO: REJEITAR (FAIL)\n\nScore: **{simulated_score:.3f}** ≥ Limiar: **{threshold:.3f}**")
+        if options_map:
+            chosen_key = st.selectbox("Selecione uma peça do lote de teste:", list(options_map.keys()))
+            selected_img_path, selected_defect_type = options_map[chosen_key]
+            # Check for ground truth mask
+            expected_mask = Path("data/mvtec") / category / "ground_truth" / selected_defect_type / f"{selected_img_path.stem}_mask.png"
+            if expected_mask.exists():
+                gt_mask_path = expected_mask
+        else:
+            st.info("Nenhuma imagem encontrada na pasta de teste.")
     else:
-        st.success(f"✅ DECISÃO: APROVADO (PASS)\n\nScore: **{simulated_score:.3f}** < Limiar: **{threshold:.3f}**")
+        st.warning(f"Pasta `{data_dir}` não encontrada. Baixe o dataset usando `python scripts/download_kaggle.py`.")
 
-with details_col:
-    st.info(
-        f"**Tipo Detectado**: `{defect_name}` | **Regiões de Falha**: `{len(defect_regions)}` | "
-        f"**Custo Estimado de Erro**: R$ {(cost_fn if (is_rejected and defect_name == 'good') else (cost_fp if (not is_rejected and defect_name != 'good') else 0.0)):,.2f}"
+with tab2:
+    file_up = st.file_uploader("Carregue uma imagem de peça para inspecionar:", type=["png", "jpg", "jpeg", "bmp"])
+    if file_up is not None:
+        uploaded_image = Image.open(file_up).convert("RGB")
+        selected_defect_type = "uploaded_inspection"
+
+# -----------------------------------------------------------------------------
+# Inference Execution & Visualization
+# -----------------------------------------------------------------------------
+active_image = uploaded_image if uploaded_image is not None else selected_img_path
+
+if active_image is not None and model is not None:
+    # 1. Run real inference
+    t_start = time.perf_counter()
+    pred_res = model.predict(active_image)
+    inference_ms = (time.perf_counter() - t_start) * 1000.0
+
+    raw_score = pred_res["anomaly_score"]
+    raw_map = pred_res["anomaly_map"]
+    img_rgb = pred_res["image_rgb"]
+
+    # 2. Post-processing
+    post_processor = AnomalyPostProcessor(
+        blur_sigma=blur_sigma,
+        opening_kernel_size=opening_k,
+        closing_kernel_size=closing_k,
     )
+    norm_map = model.normalize_map(raw_map)
 
-# -----------------------------------------------------------------------------
-# 4-Panel Visual Inspection Layout
-# -----------------------------------------------------------------------------
-vcol1, vcol2, vcol3, vcol4 = st.columns(4)
+    if use_hysteresis:
+        # Scale thresholds relative to norm bounds
+        th_norm = norm_map.mean() + (threshold - model.calibration.get("image_threshold", threshold))
+        th_norm = float(np.clip(threshold / (model.calibration.get("nominal_score_max", 1.0) * 1.5 + 1e-5), 0.1, 0.95))
+        binary_mask = post_processor.apply_hysteresis_threshold(
+            norm_map, high_threshold=th_norm, low_threshold=th_norm * 0.70
+        )
+    else:
+        binary_mask = (norm_map >= 0.5).astype(np.uint8) * 255
 
-with vcol1:
-    st.image(img_synth, caption="1. Peça Bruta (Câmera)", use_container_width=True)
+    filtered_mask = post_processor.filter_morphology(binary_mask)
+    defect_regions = post_processor.extract_defect_regions(filtered_mask, norm_map)
+    blended_overlay = post_processor.create_heatmap_overlay(img_rgb, norm_map, alpha=0.45)
 
-with vcol2:
-    st.image(norm_map, caption="2. Mapa de Anomalia Normalizado", clamp=True, use_container_width=True)
+    # 3. Decision
+    is_rejected = (raw_score >= threshold) or (len(defect_regions) > 0)
 
-with vcol3:
-    # Overlay bounding boxes on mask
-    mask_annotated = cv2.cvtColor(filtered_mask, cv2.COLOR_GRAY2RGB)
-    for reg in defect_regions:
-        x, y, w, h = reg.bbox
-        cv2.rectangle(mask_annotated, (x, y), (x + w, y + h), (255, 0, 0), 2)
-    st.image(mask_annotated, caption=f"3. Máscara Pós-Filtro ({len(defect_regions)} defeitos)", use_container_width=True)
+    # Decision Banner
+    dec_col, info_col = st.columns([1, 2])
+    with dec_col:
+        if is_rejected:
+            st.error(f"❌ DECISÃO: REJEITAR (FAIL)\n\nScore: **{raw_score:.4f}** ≥ Limiar: **{threshold:.4f}**")
+        else:
+            st.success(f"✅ DECISÃO: APROVADO (PASS)\n\nScore: **{raw_score:.4f}** < Limiar: **{threshold:.4f}**")
 
-with vcol4:
-    st.image(blended_overlay, caption="4. Overlay Térmico (QA Inspection)", use_container_width=True)
+    with info_col:
+        st.info(
+            f"**Tipo Real**: `{selected_defect_type}` | **Defeitos Localizados**: `{len(defect_regions)}` | "
+            f"**Latência Inferência**: `{inference_ms:.1f} ms`"
+        )
 
-# -----------------------------------------------------------------------------
-# Defect Regions Table
-# -----------------------------------------------------------------------------
-if defect_regions:
-    st.subheader("📋 Detalhes Espaciais dos Defeitos Detectados")
-    defect_data = [
-        {
-            "Defeito #": idx + 1,
-            "Área (pixels)": reg.area,
-            "Bounding Box (X, Y, W, H)": f"{reg.bbox}",
-            "Centroide": f"{reg.centroid}",
-            "Score Máximo": f"{reg.max_anomaly_score:.3f}",
-        }
-        for idx, reg in enumerate(defect_regions)
-    ]
-    st.dataframe(defect_data, use_container_width=True)
+    # 4. Visual Panels
+    vcol1, vcol2, vcol3, vcol4 = st.columns(4)
+    with vcol1:
+        st.image(img_rgb, caption="1. Peça Inspecionada (RGB)", use_container_width=True)
 
-# -----------------------------------------------------------------------------
-# Operational Threshold Calibration Helper
-# -----------------------------------------------------------------------------
-with st.expander("📊 Análise de Calibração de Threshold e Custo Operacional"):
-    st.write(
-        "A calibração do threshold busca o ponto ótimo onde o custo financeiro total é minimizado, "
-        "com a garantia estrita de que a taxa de recuperação (Recall) permaneça $\ge 99.5\%$."
-    )
-    # Simulate test set calibration
-    sim_labels = [0] * 50 + [1] * 50
-    sim_scores = [np.random.normal(0.2, 0.08) for _ in range(50)] + [np.random.normal(0.75, 0.12) for _ in range(50)]
-    calib_result = find_cost_sensitive_threshold(
-        sim_labels, sim_scores, cost_fn=cost_fn, cost_fp=cost_fp, min_recall_constraint=0.995
-    )
-    f1_result = find_f1_optimal_threshold(sim_labels, sim_scores)
+    with vcol2:
+        st.image(norm_map, caption="2. Mapa Térmico de Anomalia", clamp=True, use_container_width=True)
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Threshold Custo-Ótimo", f"{calib_result['calibrated_threshold']:.3f}")
-    c2.metric("Recall Garantido", f"{calib_result['achieved_recall'] * 100:.1f}%")
-    c3.metric("Threshold F1-Máximo Simétrico", f"{f1_result['optimal_threshold']:.3f}")
+    with vcol3:
+        mask_annotated = cv2.cvtColor(filtered_mask, cv2.COLOR_GRAY2RGB)
+        for reg in defect_regions:
+            x, y, w, h = reg.bbox
+            cv2.rectangle(mask_annotated, (x, y), (x + w, y + h), (255, 0, 0), 2)
+        st.image(mask_annotated, caption=f"3. Máscara Binarizada ({len(defect_regions)} defeitos)", use_container_width=True)
 
+    with vcol4:
+        st.image(blended_overlay, caption="4. Overlay Térmico Industrial", use_container_width=True)
+
+    # 5. Defect table
+    if defect_regions:
+        st.subheader("📋 Regiões com Anomalia Detectada")
+        st.dataframe(
+            [
+                {
+                    "Defeito #": idx + 1,
+                    "Área (pixels)": reg.area,
+                    "Bounding Box (X, Y, W, H)": f"{reg.bbox}",
+                    "Centroide": f"{reg.centroid}",
+                    "Score Máximo": f"{reg.max_anomaly_score:.3f}",
+                }
+                for idx, reg in enumerate(defect_regions)
+            ],
+            use_container_width=True,
+        )
+
+elif model is None:
+    st.info("ℹ️ Para executar a inspeção real, execute primeiro o treinamento do modelo:")
+    st.code("python scripts/train.py --category bottle", language="bash")
