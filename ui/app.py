@@ -58,11 +58,11 @@ st.caption(
 # Cached Loaders
 # -----------------------------------------------------------------------------
 @st.cache_resource
-def load_trained_model(weights_path: str) -> Optional[PatchCoreInferenceEngine]:
+def load_trained_model(weights_path: str, engine_type: str = "onnx_faiss") -> Optional[PatchCoreInferenceEngine]:
     p = Path(weights_path)
     if not p.exists():
         return None
-    return PatchCoreInferenceEngine.load(p, device="cpu")
+    return PatchCoreInferenceEngine.load(p, device="cpu", engine_type=engine_type, num_threads=4)
 
 
 def load_benchmark_report(category: str) -> Optional[dict]:
@@ -86,13 +86,20 @@ category = st.sidebar.selectbox(
 )
 
 weights_file = f"weights/patchcore_{category}.pt"
-model = load_trained_model(weights_file)
+onnx_exists = Path(f"weights/backbone_{category}.onnx").exists()
+engine_choice = st.sidebar.selectbox(
+    "Engine de Inferência:",
+    options=["onnx_faiss", "pytorch"] if onnx_exists else ["pytorch"],
+    index=0,
+    help="onnx_faiss usa ONNX Runtime (CPUExecutionProvider) + FAISS IndexFlatL2 SIMD.",
+)
+model = load_trained_model(weights_file, engine_type=engine_choice)
 benchmark = load_benchmark_report(category)
 
 if model is not None:
     calib = model.calibration
     default_th = float(calib.get("image_threshold", 0.45))
-    st.sidebar.success(f"✅ Modelo Carregado: `{weights_file}`")
+    st.sidebar.success(f"✅ Modelo Carregado: `{weights_file}` ({model.engine_type})")
     st.sidebar.caption(f"Backbone: **{model.config.backbone}** | Coreset: **{model.memory_bank.shape[0]} vetores**")
 else:
     default_th = 0.45

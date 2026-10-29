@@ -1,0 +1,163 @@
+{
+  "category": "bottle",
+  "backbone": "wide_resnet50_2",
+  "num_images_profiled": 30,
+  "cpu_threads": 4,
+  "memory_bank_shape": [
+    16385,
+    1024
+  ],
+  "num_patches_per_image": 784,
+  "stages": {
+    "1_preprocess_with_io": {
+      "mean_ms": 44.48,
+      "std_ms": 7.48,
+      "min_ms": 21.85,
+      "p50_ms": 44.73,
+      "p90_ms": 52.74,
+      "p95_ms": 56.6,
+      "max_ms": 61.72,
+      "share_pct": 7.0
+    },
+    "1a_disk_decode_only": {
+      "mean_ms": 33.29,
+      "std_ms": 5.22,
+      "min_ms": 16.79,
+      "p50_ms": 33.85,
+      "p90_ms": 39.46,
+      "p95_ms": 39.95,
+      "max_ms": 44.56,
+      "share_pct": 5.24
+    },
+    "1b_preprocess_in_memory": {
+      "mean_ms": 10.15,
+      "std_ms": 2.26,
+      "min_ms": 6.75,
+      "p50_ms": 9.33,
+      "p90_ms": 13.53,
+      "p95_ms": 14.14,
+      "max_ms": 14.86,
+      "share_pct": 1.6
+    },
+    "2_backbone_total": {
+      "mean_ms": 264.91,
+      "std_ms": 68.91,
+      "min_ms": 198.54,
+      "p50_ms": 250.19,
+      "p90_ms": 334.55,
+      "p95_ms": 425.32,
+      "max_ms": 475.87,
+      "share_pct": 41.71
+    },
+    "2a_backbone_cnn_layers": {
+      "mean_ms": 235.62,
+      "std_ms": 64.1,
+      "min_ms": 168.0,
+      "p50_ms": 222.18,
+      "p90_ms": 311.29,
+      "p95_ms": 383.64,
+      "max_ms": 424.28,
+      "share_pct": 37.1
+    },
+    "2b_patch_pool_and_proj": {
+      "mean_ms": 29.29,
+      "std_ms": 6.62,
+      "min_ms": 18.52,
+      "p50_ms": 28.35,
+      "p90_ms": 34.59,
+      "p95_ms": 41.67,
+      "max_ms": 51.59,
+      "share_pct": 4.61
+    },
+    "3_nn_search_total": {
+      "mean_ms": 318.45,
+      "std_ms": 73.4,
+      "min_ms": 231.05,
+      "p50_ms": 303.0,
+      "p90_ms": 349.92,
+      "p95_ms": 393.73,
+      "max_ms": 666.32,
+      "share_pct": 50.15
+    },
+    "3a_nn_cdist_patches": {
+      "mean_ms": 273.75,
+      "std_ms": 71.09,
+      "min_ms": 194.63,
+      "p50_ms": 261.57,
+      "p90_ms": 292.82,
+      "p95_ms": 343.81,
+      "max_ms": 614.36,
+      "share_pct": 43.11
+    },
+    "3b_nn_reweight_eq7": {
+      "mean_ms": 44.7,
+      "std_ms": 6.66,
+      "min_ms": 36.42,
+      "p50_ms": 43.42,
+      "p90_ms": 50.27,
+      "p95_ms": 52.98,
+      "max_ms": 71.16,
+      "share_pct": 7.04
+    },
+    "4_postprocess_total": {
+      "mean_ms": 7.21,
+      "std_ms": 10.41,
+      "min_ms": 4.04,
+      "p50_ms": 5.36,
+      "p90_ms": 6.05,
+      "p95_ms": 6.73,
+      "max_ms": 63.19,
+      "share_pct": 1.14
+    },
+    "4a_upsample_and_blur": {
+      "mean_ms": 1.74,
+      "std_ms": 0.32,
+      "min_ms": 1.12,
+      "p50_ms": 1.77,
+      "p90_ms": 2.08,
+      "p95_ms": 2.19,
+      "max_ms": 2.39,
+      "share_pct": 0.27
+    },
+    "4b_hysteresis_morph_bbox": {
+      "mean_ms": 3.89,
+      "std_ms": 10.48,
+      "min_ms": 1.17,
+      "p50_ms": 1.97,
+      "p90_ms": 2.44,
+      "p95_ms": 2.84,
+      "max_ms": 60.3,
+      "share_pct": 0.61
+    },
+    "4c_heatmap_overlay": {
+      "mean_ms": 1.58,
+      "std_ms": 0.26,
+      "min_ms": 1.09,
+      "p50_ms": 1.58,
+      "p90_ms": 1.97,
+      "p95_ms": 2.01,
+      "max_ms": 2.12,
+      "share_pct": 0.25
+    },
+    "total_e2e_with_post": {
+      "mean_ms": 635.05,
+      "std_ms": 133.89,
+      "min_ms": 502.65,
+      "p50_ms": 597.96,
+      "p90_ms": 701.51,
+      "p95_ms": 852.09,
+      "max_ms": 1202.35,
+      "share_pct": 100.0
+    },
+    "total_predict_only": {
+      "mean_ms": 629.59,
+      "std_ms": 133.15,
+      "min_ms": 499.18,
+      "p50_ms": 593.77,
+      "p90_ms": 696.47,
+      "p95_ms": 848.62,
+      "max_ms": 1197.22,
+      "share_pct": 99.14
+    }
+  }
+}

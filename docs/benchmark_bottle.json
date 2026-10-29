@@ -1,5 +1,6 @@
 {
   "category": "bottle",
+  "active_engine": "onnx_faiss",
   "backbone": "wide_resnet50_2",
   "coreset_sampling_ratio": 0.1,
   "image_size": [
@@ -7,19 +8,20 @@
     224
   ],
   "device": "cpu",
-  "timestamp": "2026-10-29T17:22:18Z",
+  "cpu_threads": 4,
+  "timestamp": "2026-10-29T17:50:25Z",
   "metrics": {
     "image_auroc": 1.0,
-    "pixel_auroc": 0.9831,
+    "pixel_auroc": 0.9834,
     "pro_metric_fpr_030": 0.9228,
     "f1_optimal": {
-      "threshold": 1.0624,
+      "threshold": 1.0499,
       "max_f1": 1.0,
       "precision": 1.0,
       "recall": 1.0
     },
     "cost_sensitive": {
-      "threshold": 1.0624,
+      "threshold": 1.0499,
       "cost_fn": 10000.0,
       "cost_fp": 1.0,
       "achieved_recall": 1.0,
@@ -27,36 +29,109 @@
     }
   },
   "latency": {
-    "mean_ms": 651.54,
-    "p50_ms": 612.95,
-    "p95_ms": 969.66,
-    "fps": 1.5,
+    "mean_ms": 495.82,
+    "min_ms": 402.26,
+    "p50_ms": 446.71,
+    "p90_ms": 537.9,
+    "p95_ms": 647.99,
+    "max_ms": 1680.69,
+    "fps": 2.02,
     "target_sla_50ms_met": false
+  },
+  "engine_comparison": {
+    "pytorch": {
+      "latency": {
+        "mean_ms": 697.5,
+        "min_ms": 540.44,
+        "p50_ms": 644.05,
+        "p90_ms": 789.2,
+        "p95_ms": 874.22,
+        "max_ms": 2699.52,
+        "fps": 1.43,
+        "target_sla_50ms_met": false
+      },
+      "metrics": {
+        "image_auroc": 1.0,
+        "pixel_auroc": 0.9834,
+        "pro_metric_fpr_030": 0.9228,
+        "f1_optimal": {
+          "threshold": 1.0624,
+          "max_f1": 1.0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "cost_sensitive": {
+          "threshold": 1.0624,
+          "cost_fn": 10000.0,
+          "cost_fp": 1.0,
+          "achieved_recall": 1.0,
+          "achieved_precision": 1.0
+        }
+      }
+    },
+    "onnx_faiss": {
+      "latency": {
+        "mean_ms": 495.82,
+        "min_ms": 402.26,
+        "p50_ms": 446.71,
+        "p90_ms": 537.9,
+        "p95_ms": 647.99,
+        "max_ms": 1680.69,
+        "fps": 2.02,
+        "target_sla_50ms_met": false
+      },
+      "metrics": {
+        "image_auroc": 1.0,
+        "pixel_auroc": 0.9834,
+        "pro_metric_fpr_030": 0.9228,
+        "f1_optimal": {
+          "threshold": 1.0499,
+          "max_f1": 1.0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "cost_sensitive": {
+          "threshold": 1.0499,
+          "cost_fn": 10000.0,
+          "cost_fp": 1.0,
+          "achieved_recall": 1.0,
+          "achieved_precision": 1.0
+        }
+      }
+    }
+  },
+  "speedup_vs_pytorch": {
+    "mean_speedup_x": 1.41,
+    "p50_speedup_x": 1.44,
+    "p90_speedup_x": 1.47,
+    "p95_speedup_x": 1.35,
+    "mean_ms_saved": 201.68,
+    "p95_ms_saved": 226.23
   },
   "test_breakdown": {
     "broken_large": {
       "count": 20,
-      "mean_score": 1.7865,
-      "min_score": 1.5349,
-      "max_score": 1.9632
+      "mean_score": 1.7713,
+      "min_score": 1.5221,
+      "max_score": 1.945
     },
     "broken_small": {
       "count": 22,
-      "mean_score": 1.721,
-      "min_score": 1.4028,
-      "max_score": 2.0582
+      "mean_score": 1.7078,
+      "min_score": 1.3962,
+      "max_score": 2.0515
     },
     "contamination": {
       "count": 21,
-      "mean_score": 1.5674,
-      "min_score": 1.0624,
-      "max_score": 2.1847
+      "mean_score": 1.5573,
+      "min_score": 1.0499,
+      "max_score": 2.1649
     },
     "good": {
       "count": 20,
-      "mean_score": 0.71,
-      "min_score": 0.6368,
-      "max_score": 0.8444
+      "mean_score": 0.7035,
+      "min_score": 0.6288,
+      "max_score": 0.8406
     }
   }
 }

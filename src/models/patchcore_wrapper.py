@@ -1,27 +1,22 @@
-"""PatchCore anomaly detection (Roth et al., CVPR 2022) - self-contained PyTorch implementation.
+"""PatchCore anomaly detection (Roth et al., CVPR 2022) - PyTorch & ONNX+FAISS engines.
 
-Pipeline:
-1. Frozen ImageNet backbone (WideResNet-50-2 / ResNet-18), taps at ``layer2`` and ``layer3``.
-2. Local neighbourhood aggregation (3x3 avg pool), ``layer3`` upsampled to ``layer2`` resolution,
-   channel concatenation, then adaptive average pooling over channels to ``embedding_dim``.
-3. Greedy k-Center coreset subsampling (on a Johnson-Lindenstrauss random projection) builds
-   a compact memory bank of nominal patch embeddings.
-4. Inference: nearest-neighbour distance of every test patch to the memory bank gives the
-   patch anomaly map (upsampled + Gaussian blur, sigma=4). Image score = re-weighted max
-   patch score (paper Eq. 7).
-
-The artefact saved by :meth:`PatchCoreInferenceEngine.save` contains the memory bank, the
-model hyper-parameters and (after evaluation) the operational calibration (thresholds and
-normalisation bounds) consumed by the Streamlit UI.
+Supports two execution backends:
+- ``engine="pytorch"``: Frozen Torchvision backbone in PyTorch eager mode +
+  ``torch.cdist`` nearest-neighbour search (reference baseline).
+- ``engine="onnx_faiss"``: ONNX Runtime ``CPUExecutionProvider`` (with fused
+  Conv+BN+ReLU and exact slice-based 1536->1024 channel pooling) +
+  ``faiss.IndexFlatL2`` SIMD AVX2 nearest-neighbour search and single-vector
+  Eq. 7 k-NN density re-weighting.
 """
 
 from __future__ import annotations
 
 import math
+import os
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -31,8 +26,11 @@ from PIL import Image
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
+_MEAN_NP = np.array(IMAGENET_MEAN, dtype=np.float32).reshape(1, 1, 3)
+_INV_STD_NP = (1.0 / np.array(IMAGENET_STD, dtype=np.float32)).reshape(1, 1, 3)
 
 SUPPORTED_BACKBONES = ("wide_resnet50_2", "resnet18")
+SUPPORTED_ENGINES = ("pytorch", "onnx_faiss")
 
 
 # -----------------------------------------------------------------------------
@@ -78,22 +76,29 @@ def load_rgb(image: Union[str, Path, Image.Image, np.ndarray]) -> Image.Image:
 
 
 def resize_center_crop(img: Image.Image, resize: int, crop: int, resample=Image.BILINEAR) -> Image.Image:
-    """Resize shorter side... (MVTec images are square) to ``resize`` then center-crop ``crop``."""
+    """Resize to ``resize`` then center-crop ``crop``."""
     img = img.resize((resize, resize), resample)
     off = (resize - crop) // 2
     return img.crop((off, off, off + crop, off + crop))
+
+
+def preprocess_numpy(
+    image: Union[str, Path, Image.Image, np.ndarray], resize: int, crop: int
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Return (contiguous float32 array 1x3xHxW, display RGB uint8 HxWx3)."""
+    pil = resize_center_crop(load_rgb(image), resize, crop)
+    rgb = np.asarray(pil, dtype=np.uint8)
+    norm = (rgb.astype(np.float32) * (1.0 / 255.0) - _MEAN_NP) * _INV_STD_NP
+    chw = np.ascontiguousarray(norm.transpose(2, 0, 1)[None, ...], dtype=np.float32)
+    return chw, rgb
 
 
 def preprocess(
     image: Union[str, Path, Image.Image, np.ndarray], resize: int, crop: int
 ) -> Tuple[torch.Tensor, np.ndarray]:
     """Return (normalised tensor 1x3xHxW, display RGB uint8 HxWx3) for the cropped view."""
-    pil = resize_center_crop(load_rgb(image), resize, crop)
-    rgb = np.asarray(pil, dtype=np.uint8)
-    t = torch.from_numpy(rgb.astype(np.float32) / 255.0).permute(2, 0, 1)
-    mean = torch.tensor(IMAGENET_MEAN).view(3, 1, 1)
-    std = torch.tensor(IMAGENET_STD).view(3, 1, 1)
-    return ((t - mean) / std).unsqueeze(0), rgb
+    chw, rgb = preprocess_numpy(image, resize, crop)
+    return torch.from_numpy(chw), rgb
 
 
 def preprocess_mask(mask_path: Optional[Union[str, Path]], resize: int, crop: int) -> np.ndarray:
@@ -206,23 +211,103 @@ def greedy_coreset_indices(
 # Inference engine
 # -----------------------------------------------------------------------------
 class PatchCoreInferenceEngine:
-    """Fit / save / load / predict PatchCore on CPU or GPU."""
+    """Fit / save / load / predict PatchCore using PyTorch or ONNX+FAISS."""
 
-    def __init__(self, config: Optional[PatchCoreConfig] = None, device: str = "cpu", pretrained: bool = True) -> None:
+    def __init__(
+        self,
+        config: Optional[PatchCoreConfig] = None,
+        device: str = "cpu",
+        pretrained: bool = True,
+        engine_type: str = "pytorch",
+        onnx_path: Optional[Union[str, Path]] = None,
+        num_threads: int = 4,
+    ) -> None:
+        if engine_type not in SUPPORTED_ENGINES:
+            raise ValueError(f"Unsupported engine_type '{engine_type}'. Options: {SUPPORTED_ENGINES}")
         self.config = config or PatchCoreConfig()
         self.device = torch.device("cuda" if device == "cuda" and torch.cuda.is_available() else "cpu")
-        self.extractor = PatchFeatureExtractor(
-            self.config.backbone, self.config.layers, self.config.embedding_dim, pretrained=pretrained
-        ).to(self.device)
+        self.engine_type = engine_type
+        self.num_threads = num_threads
+        self.onnx_path: Optional[Path] = Path(onnx_path) if onnx_path else None
+        self.ort_session: Any = None
+        self.faiss_index: Any = None
+        self.memory_bank_np: Optional[np.ndarray] = None
+
+        # Only instantiate PyTorch backbone when needed (or for training/fallback)
+        self.extractor: Optional[PatchFeatureExtractor] = None
+        if engine_type == "pytorch" or self.onnx_path is None or not self.onnx_path.exists():
+            self.extractor = PatchFeatureExtractor(
+                self.config.backbone, self.config.layers, self.config.embedding_dim, pretrained=pretrained
+            ).to(self.device)
+
         self.memory_bank: Optional[torch.Tensor] = None
         self.feature_hw: Optional[Tuple[int, int]] = None
         self.calibration: Dict[str, Any] = {}
         self.metadata: Dict[str, Any] = {}
         self.last_latency_ms: float = 0.0
 
+    # ------------------------------------------------- ONNX + FAISS setup
+    def setup_onnx_faiss(
+        self,
+        onnx_path: Optional[Union[str, Path]] = None,
+        num_threads: Optional[int] = None,
+    ) -> None:
+        """Initialise ONNX Runtime session and FAISS IndexFlatL2 over the memory bank."""
+        import faiss
+        import onnxruntime as ort
+
+        assert self.memory_bank is not None, "Cannot build FAISS index: memory_bank is None."
+        nt = num_threads or self.num_threads
+        self.num_threads = nt
+
+        # 1. Configure FAISS IndexFlatL2 with physical core count and SIMD BLAS threshold
+        faiss.omp_set_num_threads(nt)
+        if hasattr(faiss, "cvar") and hasattr(faiss.cvar, "distance_compute_blas_threshold"):
+            faiss.cvar.distance_compute_blas_threshold = 1
+        self.memory_bank_np = np.ascontiguousarray(self.memory_bank.detach().cpu().numpy(), dtype=np.float32)
+        index = faiss.IndexFlatL2(int(self.memory_bank_np.shape[1]))
+        index.add(self.memory_bank_np)
+        self.faiss_index = index
+
+        # 2. Configure ONNX Runtime session
+        if onnx_path is not None:
+            self.onnx_path = Path(onnx_path)
+        if self.onnx_path is None or not self.onnx_path.exists():
+            cat = self.calibration.get("category") or self.metadata.get("category") or "bottle"
+            default_onnx = Path(__file__).resolve().parent.parent / "weights" / f"backbone_{cat}.onnx"
+            if default_onnx.exists():
+                self.onnx_path = default_onnx
+
+        if self.onnx_path is not None and self.onnx_path.exists():
+            sess_options = ort.SessionOptions()
+            sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            sess_options.intra_op_num_threads = nt
+            sess_options.inter_op_num_threads = 1
+            sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+            sess_options.enable_cpu_mem_arena = True
+            sess_options.enable_mem_pattern = True
+            sess_options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+            self.ort_session = ort.InferenceSession(
+                str(self.onnx_path),
+                sess_options=sess_options,
+                providers=["CPUExecutionProvider"],
+            )
+        self.engine_type = "onnx_faiss"
+
     # ---------------------------------------------------------------- features
     def embed(self, batch: torch.Tensor) -> torch.Tensor:
+        if self.extractor is None:
+            self.extractor = PatchFeatureExtractor(
+                self.config.backbone, self.config.layers, self.config.embedding_dim, pretrained=True
+            ).to(self.device)
         emb = self.extractor(batch.to(self.device))
+        self.feature_hw = (int(emb.shape[-2]), int(emb.shape[-1]))
+        return emb
+
+    def embed_onnx(self, batch_np: np.ndarray) -> np.ndarray:
+        """Run backbone feature extraction in ONNX Runtime returning (B, D, h, w) numpy array."""
+        assert self.ort_session is not None, "ONNX Runtime session is not initialized."
+        emb = self.ort_session.run(["patch_embeddings"], {"input": batch_np})[0]
         self.feature_hw = (int(emb.shape[-2]), int(emb.shape[-1]))
         return emb
 
@@ -288,9 +373,31 @@ class PatchCoreInferenceEngine:
         w = 1.0 - torch.softmax(d_nb, dim=0)[0]
         return float(w * s_star)
 
-    def _anomaly_map(self, patch_scores: torch.Tensor, out_hw: Tuple[int, int]) -> np.ndarray:
+    def _nearest_and_score_faiss(self, patches_np: np.ndarray) -> Tuple[np.ndarray, float]:
+        """Single-pass FAISS IndexFlatL2 nearest neighbour search + Eq. 7 re-weighting."""
+        assert self.faiss_index is not None
+        k = max(1, int(self.config.n_neighbors))
+        d2, _ = self.faiss_index.search(patches_np, k)
+        patch_scores = np.sqrt(np.maximum(d2[:, 0], 0.0)).astype(np.float32)
+
+        star = int(np.argmax(patch_scores))
+        s_star = float(patch_scores[star])
+        if k <= 1:
+            return patch_scores, s_star
+
+        d_nb = np.sqrt(np.maximum(d2[star], 0.0))
+        exp_d = np.exp(d_nb - np.max(d_nb))
+        w = 1.0 - float(exp_d[0] / np.sum(exp_d))
+        return patch_scores, float(w * s_star)
+
+    def _anomaly_map(
+        self, patch_scores: Union[torch.Tensor, np.ndarray], out_hw: Tuple[int, int]
+    ) -> np.ndarray:
         h, w = self.feature_hw
-        grid = patch_scores.reshape(1, 1, h, w)
+        if isinstance(patch_scores, np.ndarray):
+            grid = torch.from_numpy(patch_scores).reshape(1, 1, h, w)
+        else:
+            grid = patch_scores.reshape(1, 1, h, w)
         up = F.interpolate(grid, size=out_hw, mode="bilinear", align_corners=False)[0, 0].cpu().numpy()
         sigma = self.config.blur_sigma
         if sigma > 0:
@@ -305,12 +412,27 @@ class PatchCoreInferenceEngine:
         """Full inference on one image (pre-processing included in the latency)."""
         t0 = time.perf_counter()
         cfg = self.config
-        tensor, rgb = preprocess(image, cfg.resize, cfg.crop)
-        emb = self.embed(tensor)
-        patches = emb[0].permute(1, 2, 0).reshape(-1, emb.shape[1])
-        patch_scores, nn_idx = self._nearest(patches)
-        score = self._image_score(patches, patch_scores, nn_idx)
-        amap = self._anomaly_map(patch_scores, (cfg.crop, cfg.crop))
+
+        if self.engine_type == "onnx_faiss" and self.faiss_index is not None:
+            batch_np, rgb = preprocess_numpy(image, cfg.resize, cfg.crop)
+            if self.ort_session is not None:
+                emb_np = self.embed_onnx(batch_np)
+            else:
+                emb_np = self.embed(torch.from_numpy(batch_np)).cpu().numpy()
+            patches_np = np.ascontiguousarray(
+                emb_np[0].transpose(1, 2, 0).reshape(-1, emb_np.shape[1]),
+                dtype=np.float32,
+            )
+            patch_scores_np, score = self._nearest_and_score_faiss(patches_np)
+            amap = self._anomaly_map(patch_scores_np, (cfg.crop, cfg.crop))
+        else:
+            tensor, rgb = preprocess(image, cfg.resize, cfg.crop)
+            emb = self.embed(tensor)
+            patches = emb[0].permute(1, 2, 0).reshape(-1, emb.shape[1])
+            patch_scores, nn_idx = self._nearest(patches)
+            score = self._image_score(patches, patch_scores, nn_idx)
+            amap = self._anomaly_map(patch_scores, (cfg.crop, cfg.crop))
+
         latency = (time.perf_counter() - t0) * 1000.0
         self.last_latency_ms = latency
 
@@ -321,6 +443,7 @@ class PatchCoreInferenceEngine:
             "image_rgb": rgb,
             "is_anomalous": (score >= thr) if thr is not None else None,
             "latency_ms": latency,
+            "engine_type": self.engine_type,
         }
 
     def normalize_map(self, amap: np.ndarray) -> np.ndarray:
@@ -351,15 +474,44 @@ class PatchCoreInferenceEngine:
         return path
 
     @classmethod
-    def load(cls, path: Union[str, Path], device: str = "cpu") -> "PatchCoreInferenceEngine":
+    def load(
+        cls,
+        path: Union[str, Path],
+        device: str = "cpu",
+        engine_type: str = "pytorch",
+        onnx_path: Optional[Union[str, Path]] = None,
+        num_threads: int = 4,
+    ) -> "PatchCoreInferenceEngine":
         ckpt = torch.load(Path(path), map_location="cpu", weights_only=False)
         if ckpt.get("format") != "patchcore-v1":
             raise ValueError(f"Unsupported checkpoint format in {path}")
-        engine = cls(PatchCoreConfig.from_dict(ckpt["config"]), device=device)
+        cfg = PatchCoreConfig.from_dict(ckpt["config"])
+        calib = dict(ckpt.get("calibration") or {})
+        meta = dict(ckpt.get("metadata") or {})
+
+        # Resolve default ONNX path if engine_type == 'onnx_faiss'
+        resolved_onnx = Path(onnx_path) if onnx_path else None
+        if engine_type == "onnx_faiss" and resolved_onnx is None:
+            cat = calib.get("category") or meta.get("category") or "bottle"
+            candidate = Path(path).resolve().parent / f"backbone_{cat}.onnx"
+            if candidate.exists():
+                resolved_onnx = candidate
+
+        engine = cls(
+            cfg,
+            device=device,
+            engine_type=engine_type,
+            onnx_path=resolved_onnx,
+            num_threads=num_threads,
+        )
         engine.memory_bank = ckpt["memory_bank"].to(engine.device)
         engine.feature_hw = tuple(ckpt["feature_hw"]) if ckpt.get("feature_hw") else None
-        engine.calibration = dict(ckpt.get("calibration") or {})
-        engine.metadata = dict(ckpt.get("metadata") or {})
+        engine.calibration = calib
+        engine.metadata = meta
+
+        if engine_type == "onnx_faiss":
+            engine.setup_onnx_faiss(onnx_path=resolved_onnx, num_threads=num_threads)
+
         return engine
 
 
