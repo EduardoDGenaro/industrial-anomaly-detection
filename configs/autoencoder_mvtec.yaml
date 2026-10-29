@@ -1,0 +1,43 @@
+# ==============================================================================
+# Comparative Baseline: Reconstruction Autoencoder Configuration
+# Benchmark: MVTec Anomaly Detection (MVTec AD)
+# ==============================================================================
+
+project:
+  name: "industrial-anomaly-detection"
+  seed: 42
+  device: "cuda"
+
+dataset:
+  name: "mvtec"
+  root: "./data/mvtec_anomaly_detection"
+  category: "bottle"
+  image_size: [256, 256]
+  train_batch_size: 16
+  eval_batch_size: 16
+  num_workers: 4
+
+model:
+  name: "autoencoder"
+  latent_dim: 128
+  loss_type: "ssim_l2" # Combined SSIM + MSE loss for texture fidelity
+  ssim_weight: 0.5
+  l2_weight: 0.5
+  learning_rate: 0.001
+  max_epochs: 100
+  early_stopping_patience: 15
+
+metrics:
+  image_auroc: true
+  pixel_auroc: true
+  pro_metric:
+    enabled: true
+    fpr_limit: 0.30
+
+postprocessing:
+  morphology:
+    opening_kernel_size: 3
+    closing_kernel_size: 3
+  thresholding:
+    method: "f1_optimal"
+

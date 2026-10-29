@@ -1,0 +1,90 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Unit test / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environments / IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS artifacts
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store
+
+# Datasets (MVTec AD is heavy, download into data/ but do not commit)
+data/*
+!data/.gitkeep
+
+# Checkpoints, Weights & Run Artifacts
+checkpoints/
+weights/
+runs/
+results/
+logs/
+*.ckpt
+*.pt
+*.pth
+*.onnx
+*.engine
+*.bin
+
+# Anomalib outputs
+results/
+anomalib_results/
+
+# Streamlit
+.streamlit/
+

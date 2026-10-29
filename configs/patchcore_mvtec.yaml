@@ -1,0 +1,59 @@
+# ==============================================================================
+# PatchCore Anomaly Detection Configuration
+# Benchmark: MVTec Anomaly Detection (MVTec AD)
+# ==============================================================================
+
+project:
+  name: "industrial-anomaly-detection"
+  seed: 42
+  device: "cuda" # or "cpu"
+
+dataset:
+  name: "mvtec"
+  root: "./data/mvtec_anomaly_detection"
+  category: "bottle" # default category (bottle, screw, transistor, etc.)
+  image_size: [256, 256]
+  train_batch_size: 32
+  eval_batch_size: 16
+  num_workers: 4
+  transform:
+    normalize:
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+
+model:
+  name: "patchcore"
+  backbone: "wide_resnet50_2" # options: "wide_resnet50_2", "resnet18", "dinov2_vits14"
+  layers:
+    - "layer2"
+    - "layer3"
+  coreset_sampling_ratio: 0.10 # 10% coreset preserves >99% AUROC with 10x faster inference
+  n_neighbors: 9
+  pre_trained: true
+
+metrics:
+  image_auroc: true
+  pixel_auroc: true
+  pro_metric:
+    enabled: true
+    fpr_limit: 0.30
+
+postprocessing:
+  blur_sigma: 4.0 # Gaussian smoothing parameter for patch anomaly maps
+  morphology:
+    opening_kernel_size: 3 # Eliminates isolated camera noise
+    closing_kernel_size: 5 # Connects micro-cracks
+  thresholding:
+    method: "cost_sensitive" # "cost_sensitive", "f1_optimal", "hysteresis"
+    cost_fn: 10000.0         # Cost of escaping defective part
+    cost_fp: 1.0             # Cost of false rejection
+    min_recall_constraint: 0.995
+    hysteresis:
+      high_ratio: 0.85
+      low_ratio: 0.60
+
+optimization:
+  target_latency_ms: 50.0
+  export_format: "onnx" # "torchscript", "onnx", "engine"
+  precision: "fp16"
+
