@@ -1,4 +1,4 @@
-"""Vision UI - Dark Futuristic Glassmorphism para Inspeção Visual e Qualidade 4.0.
+"""Vision UI - Dark Futuristic Glassmorphism para Inspeção Visual e Controle de Qualidade.
 
 Interface industrial de alto padrão visual baseada no design system Vision UI:
 - Fundo em gradiente escuro profundo (#070C27 para #0B1437).
@@ -422,7 +422,7 @@ _render_html(
     }
 
     .block-container {
-        padding-top: 1.8rem !important;
+        padding-top: 4.2rem !important;
         padding-bottom: 3.0rem !important;
         max-width: 1540px !important;
     }
@@ -539,7 +539,9 @@ _render_html(
         align-items: center;
         justify-content: space-between;
         gap: 16px;
+        margin-top: 6px;
         margin-bottom: 20px;
+        padding-top: 2px;
         flex-wrap: wrap;
     }
     .vision-breadcrumb {
@@ -547,8 +549,9 @@ _render_html(
         align-items: center;
         gap: 8px;
         font-size: 0.82rem;
+        line-height: 1.5;
         color: var(--vision-text-secondary);
-        margin-bottom: 4px;
+        margin-bottom: 6px;
     }
     .vision-breadcrumb-root {
         color: var(--vision-text-secondary);
@@ -1191,7 +1194,7 @@ _render_html(
         </div>
         <div>
             <div style="font-size: 0.95rem; font-weight: 800; color: #FFFFFF; letter-spacing: 0.04em;">VISION UI</div>
-            <div style="font-size: 0.68rem; font-weight: 600; color: #A0AEC0; text-transform: uppercase;">MACHINE VISION 4.0</div>
+            <div style="font-size: 0.68rem; font-weight: 600; color: #A0AEC0; text-transform: uppercase;">MACHINE VISION</div>
         </div>
     </div>
     """,
@@ -1335,7 +1338,7 @@ _render_html(
                 <span class="vision-breadcrumb-sep">/</span>
                 <span class="vision-breadcrumb-curr">{html.escape(active_cat_label)}</span>
             </div>
-            <div class="vision-page-title">Controle de Qualidade Óptica 4.0</div>
+            <div class="vision-page-title">Controle de Qualidade Óptica</div>
         </div>
         <div class="vision-topbar-right">
             <div class="vision-search-box">
