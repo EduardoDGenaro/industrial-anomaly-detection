@@ -83,3 +83,37 @@ def test_create_heatmap_overlay(post_processor):
     assert blended.shape == (50, 50, 3)
     assert blended.dtype == np.uint8
 
+
+def test_otsu_foreground_mask_and_segment_defects(post_processor):
+    """Test Otsu foreground extraction and decoupled pixel-threshold segmentation."""
+    # Simulate a dark screw on a uniform bright (220) background
+    img = np.full((100, 100, 3), 220, dtype=np.uint8)
+    img[25:75, 40:60] = 60  # screw shaft silhouette
+
+    raw_map = np.full((100, 100), 1.30, dtype=np.float32)  # background noise
+    raw_map[25:75, 40:60] = 1.40  # normal screw body
+    raw_map[65:74, 44:56] = 1.85  # localized defect at screw tip
+
+    norm_map, filtered_mask, fg_mask, regions = post_processor.segment_defects(
+        raw_map=raw_map,
+        image_rgb=img,
+        pixel_baseline=1.40,
+        pixel_threshold=1.55,
+        tau_high=0.68,
+        tau_low=0.45,
+        use_foreground_mask=True,
+    )
+
+    # Background outside screw silhouette must be forced to 0.0
+    assert norm_map[5, 5] == pytest.approx(0.0)
+    assert fg_mask[5, 5] == 0
+    assert fg_mask[50, 50] == 255
+
+    # Strictly 1 localized defect at the screw tip (not the whole screw or background)
+    assert len(regions) == 1
+    x, y, w, h = regions[0].bbox
+    assert 40 <= x <= 46
+    assert 60 <= y <= 67
+    assert w <= 20 and h <= 16
+
+

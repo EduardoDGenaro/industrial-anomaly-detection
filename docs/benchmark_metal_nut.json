@@ -1,0 +1,79 @@
+{
+  "category": "metal_nut",
+  "active_engine": "onnx_faiss",
+  "backbone": "resnet18",
+  "embedding_dim": 384,
+  "coreset_sampling_ratio": 0.01,
+  "memory_bank_vectors": 1724,
+  "image_size": [
+    224,
+    224
+  ],
+  "device": "cpu",
+  "cpu_threads": 4,
+  "timestamp": "2026-10-30T19:08:02Z",
+  "metrics": {
+    "image_auroc": 0.999,
+    "pixel_auroc": 0.9712,
+    "pro_metric_fpr_030": 0.8933,
+    "pixel_baseline": 1.7416,
+    "pixel_threshold": 1.9177,
+    "f1_optimal": {
+      "threshold": 2.0144,
+      "max_f1": 0.9947,
+      "precision": 0.9894,
+      "recall": 1.0
+    },
+    "cost_sensitive": {
+      "threshold": 2.0144,
+      "cost_fn": 10000.0,
+      "cost_fp": 1.0,
+      "achieved_recall": 1.0,
+      "achieved_precision": 0.9894
+    }
+  },
+  "latency": {
+    "mean_ms": 104.14,
+    "min_ms": 81.41,
+    "p50_ms": 102.26,
+    "p90_ms": 114.78,
+    "p95_ms": 127.97,
+    "max_ms": 181.29,
+    "fps": 9.6,
+    "e2e_mean_ms": 107.79,
+    "e2e_p95_ms": 131.97,
+    "target_sla_900ms_met": true
+  },
+  "test_breakdown": {
+    "bent": {
+      "count": 25,
+      "mean_score": 2.6329,
+      "min_score": 2.2411,
+      "max_score": 3.0533
+    },
+    "color": {
+      "count": 22,
+      "mean_score": 2.5036,
+      "min_score": 2.0144,
+      "max_score": 2.92
+    },
+    "flip": {
+      "count": 23,
+      "mean_score": 2.7792,
+      "min_score": 2.6108,
+      "max_score": 3.0359
+    },
+    "good": {
+      "count": 22,
+      "mean_score": 1.9105,
+      "min_score": 1.8352,
+      "max_score": 2.0694
+    },
+    "scratch": {
+      "count": 23,
+      "mean_score": 2.3848,
+      "min_score": 2.0626,
+      "max_score": 2.8646
+    }
+  }
+}

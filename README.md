@@ -1,4 +1,4 @@
-# 🏭 Industrial Anomaly Detection (IAD)
+# Industrial Anomaly Detection (IAD)
 ### Inspeção Visual e Detecção de Falhas Não Supervisionada em Linhas de Produção
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
@@ -8,7 +8,7 @@
 
 ---
 
-## 📌 Visão Geral do Projeto
+## Visão Geral do Projeto
 
 O **Industrial Anomaly Detection (IAD)** é uma plataforma completa de visão computacional e MLOps para inspeção de qualidade contínua em manufatura (Quality Assurance 4.0).
 
@@ -19,7 +19,7 @@ Diferente de classificadores supervisionados convencionais, este sistema opera n
 
 ---
 
-## 🎯 Metas de Produção e KPIs
+## Metas de Produção e KPIs
 
 | Métrica / KPI | Meta Alvo (SLA de Produção) | Descrição e Impacto |
 | :--- | :--- | :--- |
@@ -33,7 +33,7 @@ Consulte o documento completo de especificações em [`PROJECT_SPEC.md`](PROJECT
 
 ---
 
-## 🗂️ Estrutura do Repositório
+## Estrutura do Repositório
 
 ```text
 ├── configs/
@@ -73,7 +73,7 @@ Consulte o documento completo de especificações em [`PROJECT_SPEC.md`](PROJECT
 
 ---
 
-## 🚀 Setup do Ambiente
+## Setup do Ambiente
 
 ### 1. Pré-requisitos
 - Python 3.10, 3.11 ou 3.12
@@ -100,7 +100,7 @@ pip install -r requirements.txt
 
 ---
 
-## 📦 Ingestão do Dataset MVTec AD
+## Ingestão do Dataset MVTec AD
 
 Para baixar e preparar automaticamente uma categoria específica (ex: `bottle`):
 
@@ -117,7 +117,7 @@ As 15 classes suportadas incluem:
 
 ---
 
-## 🖥️ Aplicação Streamlit de Inspeção e Calibração
+## Aplicação Streamlit de Inspeção e Calibração
 
 Inicie o console visual de controle de qualidade para operadores e engenheiros de automação:
 
@@ -133,7 +133,7 @@ streamlit run ui/app.py
 
 ---
 
-## 🧪 Execução dos Testes Automatizados
+## Execução dos Testes Automatizados
 
 Execute a suíte de testes unitários:
 
@@ -148,7 +148,7 @@ pytest --cov=src tests/
 
 ---
 
-## ⚙️ Modelagem: PatchCore vs. Autoencoder
+## Modelagem: PatchCore vs. Autoencoder
 
 | Característica | PatchCore (Recomendado) | Autoencoder Convolucional |
 | :--- | :--- | :--- |

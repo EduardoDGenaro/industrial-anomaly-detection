@@ -1,27 +1,29 @@
 {
   "category": "bottle",
   "active_engine": "onnx_faiss",
-  "backbone": "wide_resnet50_2",
-  "coreset_sampling_ratio": 0.1,
+  "backbone": "resnet18",
+  "embedding_dim": 384,
+  "coreset_sampling_ratio": 0.01,
+  "memory_bank_vectors": 1638,
   "image_size": [
     224,
     224
   ],
   "device": "cpu",
   "cpu_threads": 4,
-  "timestamp": "2026-10-29T17:50:25Z",
+  "timestamp": "2026-10-29T18:04:26Z",
   "metrics": {
     "image_auroc": 1.0,
-    "pixel_auroc": 0.9834,
-    "pro_metric_fpr_030": 0.9228,
+    "pixel_auroc": 0.9777,
+    "pro_metric_fpr_030": 0.91,
     "f1_optimal": {
-      "threshold": 1.0499,
+      "threshold": 1.7207,
       "max_f1": 1.0,
       "precision": 1.0,
       "recall": 1.0
     },
     "cost_sensitive": {
-      "threshold": 1.0499,
+      "threshold": 1.7207,
       "cost_fn": 10000.0,
       "cost_fp": 1.0,
       "achieved_recall": 1.0,
@@ -29,17 +31,93 @@
     }
   },
   "latency": {
-    "mean_ms": 495.82,
-    "min_ms": 402.26,
-    "p50_ms": 446.71,
-    "p90_ms": 537.9,
-    "p95_ms": 647.99,
-    "max_ms": 1680.69,
-    "fps": 2.02,
-    "target_sla_50ms_met": false
+    "mean_ms": 43.86,
+    "min_ms": 35.32,
+    "p50_ms": 43.15,
+    "p90_ms": 46.87,
+    "p95_ms": 48.35,
+    "max_ms": 98.92,
+    "fps": 22.8,
+    "target_sla_50ms_met": true
+  },
+  "coreset_sensitivity": {
+    "wide_resnet50_2_coreset_10pct": {
+      "backbone": "wide_resnet50_2",
+      "coreset_sampling_ratio": 0.1,
+      "memory_bank_shape": [
+        16385,
+        1024
+      ],
+      "faiss_search_mean_ms": 226.9,
+      "e2e_latency": {
+        "mean_ms": 495.82,
+        "p50_ms": 446.71,
+        "p90_ms": 537.9,
+        "p95_ms": 647.99,
+        "fps": 2.02,
+        "target_sla_50ms_met": false
+      },
+      "metrics": {
+        "image_auroc": 1.0,
+        "pixel_auroc": 0.9834,
+        "pro_metric_fpr_030": 0.9228
+      }
+    },
+    "wide_resnet50_2_coreset_1pct": {
+      "backbone": "wide_resnet50_2",
+      "coreset_sampling_ratio": 0.01,
+      "memory_bank_shape": [
+        1638,
+        1024
+      ],
+      "faiss_search_mean_ms": 21.4,
+      "faiss_search_p95_ms": 32.29,
+      "faiss_speedup_vs_10pct_x": 10.6,
+      "e2e_latency": {
+        "mean_ms": 236.5,
+        "p50_ms": 236.72,
+        "p90_ms": 266.47,
+        "p95_ms": 288.5,
+        "fps": 4.23,
+        "target_sla_50ms_met": false
+      },
+      "metrics": {
+        "image_auroc": 1.0,
+        "pixel_auroc": 0.9827,
+        "pro_metric_fpr_030": 0.917,
+        "f1_optimal_threshold": 1.1583,
+        "max_f1": 1.0
+      }
+    },
+    "resnet18_coreset_1pct_sla": {
+      "backbone": "resnet18",
+      "coreset_sampling_ratio": 0.01,
+      "memory_bank_shape": [
+        1638,
+        384
+      ],
+      "onnx_backbone_mean_ms": 18.0,
+      "faiss_search_mean_ms": 8.83,
+      "e2e_latency": {
+        "mean_ms": 43.86,
+        "p50_ms": 43.15,
+        "p90_ms": 46.87,
+        "p95_ms": 48.35,
+        "fps": 22.8,
+        "target_sla_50ms_met": true
+      },
+      "metrics": {
+        "image_auroc": 1.0,
+        "pixel_auroc": 0.9777,
+        "pro_metric_fpr_030": 0.91,
+        "f1_optimal_threshold": 1.7207,
+        "max_f1": 1.0
+      }
+    }
   },
   "engine_comparison": {
     "pytorch": {
+      "description": "Baseline WideResNet-50-2 (PyTorch Eager + torch.cdist, 10% Coreset = 16,385x1024)",
       "latency": {
         "mean_ms": 697.5,
         "min_ms": 540.44,
@@ -69,7 +147,8 @@
         }
       }
     },
-    "onnx_faiss": {
+    "onnx_faiss_wrn50_10pct": {
+      "description": "WideResNet-50-2 (ONNX Runtime + FAISS IndexFlatL2, 10% Coreset = 16,385x1024)",
       "latency": {
         "mean_ms": 495.82,
         "min_ms": 402.26,
@@ -83,15 +162,51 @@
       "metrics": {
         "image_auroc": 1.0,
         "pixel_auroc": 0.9834,
-        "pro_metric_fpr_030": 0.9228,
+        "pro_metric_fpr_030": 0.9228
+      }
+    },
+    "onnx_faiss_wrn50_1pct": {
+      "description": "WideResNet-50-2 (ONNX Runtime + FAISS IndexFlatL2, 1% Coreset = 1,638x1024)",
+      "latency": {
+        "mean_ms": 236.5,
+        "min_ms": 188.45,
+        "p50_ms": 236.72,
+        "p90_ms": 266.47,
+        "p95_ms": 288.5,
+        "max_ms": 312.4,
+        "fps": 4.23,
+        "target_sla_50ms_met": false
+      },
+      "metrics": {
+        "image_auroc": 1.0,
+        "pixel_auroc": 0.9827,
+        "pro_metric_fpr_030": 0.917
+      }
+    },
+    "onnx_faiss": {
+      "description": "ResNet-18 SLA Production Profile (ONNX Runtime + FAISS IndexFlatL2, 1% Coreset = 1,638x384)",
+      "latency": {
+        "mean_ms": 43.86,
+        "min_ms": 35.32,
+        "p50_ms": 43.15,
+        "p90_ms": 46.87,
+        "p95_ms": 48.35,
+        "max_ms": 98.92,
+        "fps": 22.8,
+        "target_sla_50ms_met": true
+      },
+      "metrics": {
+        "image_auroc": 1.0,
+        "pixel_auroc": 0.9777,
+        "pro_metric_fpr_030": 0.91,
         "f1_optimal": {
-          "threshold": 1.0499,
+          "threshold": 1.7207,
           "max_f1": 1.0,
           "precision": 1.0,
           "recall": 1.0
         },
         "cost_sensitive": {
-          "threshold": 1.0499,
+          "threshold": 1.7207,
           "cost_fn": 10000.0,
           "cost_fp": 1.0,
           "achieved_recall": 1.0,
@@ -101,37 +216,37 @@
     }
   },
   "speedup_vs_pytorch": {
-    "mean_speedup_x": 1.41,
-    "p50_speedup_x": 1.44,
-    "p90_speedup_x": 1.47,
-    "p95_speedup_x": 1.35,
-    "mean_ms_saved": 201.68,
-    "p95_ms_saved": 226.23
+    "mean_speedup_x": 15.9,
+    "p50_speedup_x": 14.93,
+    "p90_speedup_x": 16.84,
+    "p95_speedup_x": 18.08,
+    "mean_ms_saved": 653.64,
+    "p95_ms_saved": 825.87
   },
   "test_breakdown": {
     "broken_large": {
       "count": 20,
-      "mean_score": 1.7713,
-      "min_score": 1.5221,
-      "max_score": 1.945
+      "mean_score": 3.0047,
+      "min_score": 2.7346,
+      "max_score": 3.3275
     },
     "broken_small": {
       "count": 22,
-      "mean_score": 1.7078,
-      "min_score": 1.3962,
-      "max_score": 2.0515
+      "mean_score": 2.9112,
+      "min_score": 2.1671,
+      "max_score": 3.4608
     },
     "contamination": {
       "count": 21,
-      "mean_score": 1.5573,
-      "min_score": 1.0499,
-      "max_score": 2.1649
+      "mean_score": 2.5447,
+      "min_score": 1.7207,
+      "max_score": 3.6962
     },
     "good": {
       "count": 20,
-      "mean_score": 0.7035,
-      "min_score": 0.6288,
-      "max_score": 0.8406
+      "mean_score": 1.3281,
+      "min_score": 1.2087,
+      "max_score": 1.4948
     }
   }
 }

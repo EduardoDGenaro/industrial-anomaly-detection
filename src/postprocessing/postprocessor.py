@@ -29,18 +29,18 @@ class AnomalyPostProcessor:
 
     def __init__(
         self,
-        blur_sigma: float = 4.0,
+        blur_sigma: float = 1.5,
         opening_kernel_size: int = 3,
         closing_kernel_size: int = 5,
-        min_defect_area_pixels: int = 10,
+        min_defect_area_pixels: int = 24,
     ) -> None:
         """Initialize post-processor.
 
         Args:
-            blur_sigma: Sigma for Gaussian spatial smoothing.
-            opening_kernel_size: Kernel size for morphological opening (removes dust/sensor noise).
+            blur_sigma: Sigma for Gaussian spatial smoothing (1.5-2.0 prevents bleeding).
+            opening_kernel_size: Kernel size for morphological opening (removes dust/thread noise).
             closing_kernel_size: Kernel size for morphological closing (connects scratches).
-            min_defect_area_pixels: Minimum blob size to consider as a defect.
+            min_defect_area_pixels: Minimum blob size in pixels to consider as a defect.
         """
         self.blur_sigma = blur_sigma
         self.opening_kernel_size = opening_kernel_size
@@ -54,6 +54,8 @@ class AnomalyPostProcessor:
         self.close_kernel = cv2.getStructuringElement(
             cv2.MORPH_RECT, (closing_kernel_size, closing_kernel_size)
         )
+        self._fg_close_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
+        self._fg_dilate_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
 
     def smooth_anomaly_map(self, anomaly_map: np.ndarray) -> np.ndarray:
         """Apply Gaussian blur to smooth patch interpolation artifacts."""
@@ -61,6 +63,40 @@ class AnomalyPostProcessor:
             return anomaly_map
         ksize = int(2 * round(self.blur_sigma * 2) + 1)
         return cv2.GaussianBlur(anomaly_map, (ksize, ksize), self.blur_sigma)
+
+    def extract_foreground_mask(self, image_rgb: np.ndarray) -> np.ndarray:
+        """Extract binary object silhouette (0 or 255) via inverted Otsu thresholding.
+
+        For objects placed on a uniform bright background (e.g. MVTec 'screw'),
+        segments the part silhouette, fills internal specular reflections, and
+        applies a small boundary dilation so edge defects (such as a damaged tip)
+        are preserved while background pixels are forced to zero.
+        """
+        if image_rgb.ndim == 3:
+            gray = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = image_rgb.copy()
+
+        border = np.concatenate([gray[0, :], gray[-1, :], gray[:, 0], gray[:, -1]])
+        if float(border.mean()) < 160.0 or float(border.std()) > 32.0:
+            return np.full(gray.shape, 255, dtype=np.uint8)
+
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        _, fg = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        fg = cv2.morphologyEx(fg, cv2.MORPH_CLOSE, self._fg_close_kernel)
+
+        contours, _ = cv2.findContours(fg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return np.full(gray.shape, 255, dtype=np.uint8)
+
+        fg_filled = np.zeros_like(fg)
+        max_area = max(cv2.contourArea(c) for c in contours)
+        for cnt in contours:
+            if cv2.contourArea(cnt) >= max(64.0, 0.15 * max_area):
+                cv2.drawContours(fg_filled, [cnt], -1, 255, thickness=cv2.FILLED)
+
+        fg_filled = cv2.dilate(fg_filled, self._fg_dilate_kernel, iterations=1)
+        return fg_filled
 
     def normalize_anomaly_map(
         self,
@@ -72,11 +108,52 @@ class AnomalyPostProcessor:
         v_min = float(anomaly_map.min()) if min_val is None else min_val
         v_max = float(anomaly_map.max()) if max_val is None else max_val
 
-        if np.isclose(v_min, v_max):
+        if np.isclose(v_min, v_max) or v_max <= v_min:
             return np.zeros_like(anomaly_map, dtype=np.float32)
 
         norm_map = (anomaly_map - v_min) / (v_max - v_min)
         return np.clip(norm_map, 0.0, 1.0).astype(np.float32)
+
+    def segment_defects(
+        self,
+        raw_map: np.ndarray,
+        image_rgb: np.ndarray,
+        pixel_baseline: float,
+        pixel_threshold: float,
+        tau_high: float = 0.68,
+        tau_low: float = 0.45,
+        use_foreground_mask: bool = True,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[DefectRegion]]:
+        """Calibrated pixel-level spatial segmentation pipeline.
+
+        Strictly decouples pixel segmentation from the image-level classification
+        threshold, suppresses background via Otsu foreground mask, applies
+        dual-threshold hysteresis (tau_high / tau_low), 3x3 morphological opening,
+        and minimum area filtering.
+
+        Returns:
+            Tuple of (norm_map, filtered_mask, fg_mask, defect_regions).
+        """
+        fg_mask = (
+            self.extract_foreground_mask(image_rgb)
+            if use_foreground_mask
+            else np.full(raw_map.shape, 255, dtype=np.uint8)
+        )
+        fg_vals = raw_map[fg_mask > 0] if np.any(fg_mask > 0) else raw_map.ravel()
+
+        eff_lo = max(float(pixel_baseline), float(np.percentile(fg_vals, 75.0)))
+        eff_hi = max(float(pixel_threshold) * 1.08, float(fg_vals.max()), eff_lo + 1e-4)
+
+        norm_map = np.clip((raw_map - eff_lo) / (eff_hi - eff_lo), 0.0, 1.0).astype(np.float32)
+        norm_map[fg_mask == 0] = 0.0
+
+        binary_mask = self.apply_hysteresis_threshold(
+            norm_map, high_threshold=tau_high, low_threshold=tau_low
+        )
+        binary_mask[fg_mask == 0] = 0
+        filtered_mask = self.filter_morphology(binary_mask)
+        regions = self.extract_defect_regions(filtered_mask, norm_map)
+        return norm_map, filtered_mask, fg_mask, regions
 
     def apply_hysteresis_threshold(
         self,

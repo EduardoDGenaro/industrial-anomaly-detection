@@ -1,6 +1,5 @@
 # ==============================================================================
 # Industrial Anomaly Detection - Production Dependencies
-# Target Python Version: >= 3.10, < 3.13
 # ==============================================================================
 
 # Core Deep Learning & Anomaly Detection
@@ -34,6 +33,7 @@ streamlit>=1.32.0
 matplotlib>=3.8.0
 seaborn>=0.13.0
 plotly>=5.18.0
+fpdf2>=2.7.8
 
 # Pipeline Configuration & Utilities
 pyyaml>=6.0.1

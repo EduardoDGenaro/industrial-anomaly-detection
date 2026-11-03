@@ -100,6 +100,7 @@ def create_ort_session(onnx_path: Path, num_threads: int = 4) -> ort.InferenceSe
     sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
     sess_options.enable_cpu_mem_arena = True
     sess_options.enable_mem_pattern = True
+    sess_options.add_session_config_entry("session.intra_op.allow_spinning", "0")
     return ort.InferenceSession(
         str(onnx_path),
         sess_options=sess_options,

@@ -31,7 +31,9 @@ from src.dataset.mvtec import MVTecDataset
 from src.models.patchcore_wrapper import (
     SUPPORTED_ENGINES,
     PatchCoreInferenceEngine,
+    load_rgb,
     preprocess_mask,
+    resize_center_crop,
 )
 from src.utils.metrics import (
     compute_image_auroc,
@@ -50,6 +52,8 @@ def evaluate_engine(
     onnx_path: str | None = None,
     warmup: int = 5,
     num_threads: int = 4,
+    coreset_ratio_override: float | None = None,
+    in_memory_frames: bool = False,
 ) -> Dict[str, Any]:
     """Run full benchmark for a specific engine ('pytorch' or 'onnx_faiss')."""
     print(f"\n[INFO] Loading model with engine='{engine_type}' (threads={num_threads})...")
@@ -62,9 +66,32 @@ def evaluate_engine(
     )
     cfg = engine.config
 
+    # Optional dynamic coreset subsampling override (sequential greedy k-center prefix)
+    if coreset_ratio_override is not None and engine.memory_bank is not None:
+        total_patches = int(engine.metadata.get("num_patches", round(engine.memory_bank.shape[0] / max(cfg.coreset_sampling_ratio, 1e-6))))
+        target_vecs = max(1, int(total_patches * coreset_ratio_override))
+        if target_vecs < engine.memory_bank.shape[0]:
+            print(
+                f"[INFO] Overriding coreset ratio: {cfg.coreset_sampling_ratio:.2f} -> {coreset_ratio_override:.2f} "
+                f"({engine.memory_bank.shape[0]} -> {target_vecs} vectors)"
+            )
+            engine.memory_bank = engine.memory_bank[:target_vecs].contiguous()
+            cfg.coreset_sampling_ratio = coreset_ratio_override
+            if engine_type == "onnx_faiss":
+                engine.setup_onnx_faiss(onnx_path=engine.onnx_path, num_threads=num_threads)
+
+    # Pre-load frames if simulating industrial camera frame buffer (in-memory RGB)
+    inputs: List[Any] = []
+    if in_memory_frames:
+        for s in test_ds.samples:
+            pil = resize_center_crop(load_rgb(s.image_path), cfg.resize, cfg.crop)
+            inputs.append(np.asarray(pil, dtype=np.uint8))
+    else:
+        inputs = [s.image_path for s in test_ds.samples]
+
     print(f"[INFO] Warming up hardware cache ({warmup} passes)...")
-    for i in range(min(warmup, len(test_ds))):
-        _ = engine.predict(test_ds.samples[i].image_path)
+    for i in range(min(warmup, len(inputs))):
+        _ = engine.predict(inputs[i])
 
     print(f"[INFO] Evaluating {len(test_ds)} test images with engine='{engine_type}'...")
     labels: List[int] = []
@@ -75,7 +102,7 @@ def evaluate_engine(
     per_defect_scores: Dict[str, List[float]] = {}
 
     for i, sample in enumerate(test_ds.samples):
-        res = engine.predict(sample.image_path)
+        res = engine.predict(inputs[i])
         gt_mask = preprocess_mask(sample.mask_path, cfg.resize, cfg.crop)
 
         labels.append(sample.label)
@@ -161,6 +188,8 @@ def main() -> int:
     parser.add_argument("--data-root", default="data/mvtec", help="Path to dataset root")
     parser.add_argument("--engine", default="onnx_faiss", choices=SUPPORTED_ENGINES, help="Inference engine backend")
     parser.add_argument("--onnx", default=None, help="Optional explicit ONNX backbone path")
+    parser.add_argument("--coreset-ratio", type=float, default=None, help="Optional coreset ratio override (e.g. 0.01)")
+    parser.add_argument("--in-memory", action="store_true", help="Benchmark on pre-decoded camera buffer frames in RAM")
     parser.add_argument("--compare", action="store_true", help="Run both pytorch and onnx_faiss for head-to-head comparison")
     parser.add_argument("--threads", type=int, default=4, help="Number of CPU threads")
     parser.add_argument("--out", default="docs/benchmark_bottle.json", help="Path to output JSON")
@@ -201,11 +230,27 @@ def main() -> int:
     if args.compare:
         for eng_name in ("pytorch", "onnx_faiss"):
             results_by_engine[eng_name] = evaluate_engine(
-                weights_p, test_ds, eng_name, args.device, args.onnx, args.warmup, args.threads
+                weights_p,
+                test_ds,
+                eng_name,
+                args.device,
+                args.onnx,
+                args.warmup,
+                args.threads,
+                coreset_ratio_override=args.coreset_ratio,
+                in_memory_frames=args.in_memory,
             )
     else:
         results_by_engine[args.engine] = evaluate_engine(
-            weights_p, test_ds, args.engine, args.device, args.onnx, args.warmup, args.threads
+            weights_p,
+            test_ds,
+            args.engine,
+            args.device,
+            args.onnx,
+            args.warmup,
+            args.threads,
+            coreset_ratio_override=args.coreset_ratio,
+            in_memory_frames=args.in_memory,
         )
 
     primary = results_by_engine[args.engine]
@@ -213,18 +258,19 @@ def main() -> int:
     m = primary["metrics"]
     lat = primary["latency"]
 
-    # Update calibration inside weights artifact
-    engine.calibration.update({
-        "image_threshold": float(m["cost_sensitive"]["threshold"]),
-        "f1_threshold": float(m["f1_optimal"]["threshold"]),
-        "map_min": primary["map_bounds"]["map_min"],
-        "map_max": primary["map_bounds"]["map_max"],
-        "image_auroc": float(m["image_auroc"]),
-        "pixel_auroc": float(m["pixel_auroc"]),
-        "pro_metric": float(m["pro_metric_fpr_030"]),
-        "mean_latency_ms": float(lat["mean_ms"]),
-    })
-    engine.save(weights_p)
+    # Update calibration inside weights artifact (only when not overriding coreset ratio)
+    if args.coreset_ratio is None:
+        engine.calibration.update({
+            "image_threshold": float(m["cost_sensitive"]["threshold"]),
+            "f1_threshold": float(m["f1_optimal"]["threshold"]),
+            "map_min": primary["map_bounds"]["map_min"],
+            "map_max": primary["map_bounds"]["map_max"],
+            "image_auroc": float(m["image_auroc"]),
+            "pixel_auroc": float(m["pixel_auroc"]),
+            "pro_metric": float(m["pro_metric_fpr_030"]),
+            "mean_latency_ms": float(lat["mean_ms"]),
+        })
+        engine.save(weights_p)
 
     # Preserve or merge engine comparison
     comparison = existing_json.get("engine_comparison", {})

@@ -41,6 +41,7 @@ def main() -> int:
     parser.add_argument("--data-root", default="data/mvtec", help="Path to MVTec dataset root")
     parser.add_argument("--out", default="weights/patchcore_bottle.pt", help="Output path for weights")
     parser.add_argument("--backbone", default=None, help="Override backbone (e.g. wide_resnet50_2 or resnet18)")
+    parser.add_argument("--embedding-dim", type=int, default=None, help="Override embedding dimension (e.g. 384 for resnet18)")
     parser.add_argument("--coreset-ratio", type=float, default=None, help="Override coreset ratio")
     parser.add_argument("--device", default="cpu", help="Device (cpu or cuda)")
     args = parser.parse_args()
@@ -48,6 +49,10 @@ def main() -> int:
     cfg, _ = load_config_yaml(args.config)
     if args.backbone:
         cfg.backbone = args.backbone
+        if args.backbone == "resnet18" and args.embedding_dim is None:
+            cfg.embedding_dim = 384
+    if args.embedding_dim is not None:
+        cfg.embedding_dim = args.embedding_dim
     if args.coreset_ratio is not None:
         cfg.coreset_sampling_ratio = args.coreset_ratio
 
@@ -70,16 +75,32 @@ def main() -> int:
 
     # Compute baseline score statistics on normal images for calibration
     print("[INFO] Calibrating score baseline on normal training images...")
+    engine.calibration["category"] = args.category
+    try:
+        engine.setup_onnx_faiss()
+    except Exception:
+        pass
+    import numpy as np
+    from src.postprocessing.postprocessor import AnomalyPostProcessor
+
+    pp = AnomalyPostProcessor(blur_sigma=cfg.blur_sigma)
     scores: List[float] = []
     map_maxes: List[float] = []
+    fg_pixel_chunks: List[np.ndarray] = []
     for img_p in train_imgs[:30]:  # sample subset for fast calibration
         res = engine.predict(img_p)
         scores.append(res["anomaly_score"])
-        map_maxes.append(float(res["anomaly_map"].max()))
+        amap = res["anomaly_map"]
+        map_maxes.append(float(amap.max()))
+        fg = pp.extract_foreground_mask(res["image_rgb"])
+        fg_pixel_chunks.append(amap[fg > 0] if np.any(fg > 0) else amap.ravel())
 
+    all_fg_pixels = np.concatenate(fg_pixel_chunks)
     engine.calibration = {
         "nominal_score_mean": float(sum(scores) / len(scores)),
         "nominal_score_max": float(max(scores)),
+        "pixel_baseline": float(np.percentile(all_fg_pixels, 85.0)),
+        "pixel_threshold": float(np.percentile(all_fg_pixels, 99.5)),
         "map_min": 0.0,
         "map_max": float(max(map_maxes) * 1.5),
         "category": args.category,

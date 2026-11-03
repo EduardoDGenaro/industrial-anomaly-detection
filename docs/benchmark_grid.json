@@ -1,0 +1,129 @@
+{
+  "category": "grid",
+  "active_engine": "onnx_faiss",
+  "backbone": "resnet18",
+  "embedding_dim": 384,
+  "coreset_sampling_ratio": 0.01,
+  "memory_bank_vectors": 2069,
+  "image_size": [
+    224,
+    224
+  ],
+  "device": "cpu",
+  "cpu_threads": 4,
+  "timestamp": "2026-10-29T18:34:12Z",
+  "metrics": {
+    "image_auroc": 0.9599,
+    "pixel_auroc": 0.9666,
+    "pro_metric_fpr_030": 0.8615,
+    "f1_optimal": {
+      "threshold": 1.5172,
+      "max_f1": 0.9483,
+      "precision": 0.9322,
+      "recall": 0.9649
+    },
+    "cost_sensitive": {
+      "threshold": 1.3978,
+      "cost_fn": 10000.0,
+      "cost_fp": 1.0,
+      "achieved_recall": 1.0,
+      "achieved_precision": 0.75
+    }
+  },
+  "latency": {
+    "mean_ms": 47.09,
+    "min_ms": 37.58,
+    "p50_ms": 47.13,
+    "p90_ms": 50.33,
+    "p95_ms": 50.96,
+    "max_ms": 60.05,
+    "fps": 21.24,
+    "target_sla_50ms_met": true
+  },
+  "coreset_sensitivity": {
+    "resnet18_coreset_1pct_sla": {
+      "backbone": "resnet18",
+      "coreset_sampling_ratio": 0.01,
+      "memory_bank_shape": [
+        2069,
+        384
+      ],
+      "e2e_latency": {
+        "mean_ms": 47.09,
+        "p50_ms": 47.13,
+        "p90_ms": 50.33,
+        "p95_ms": 50.96,
+        "fps": 21.24,
+        "target_sla_50ms_met": true
+      },
+      "metrics": {
+        "image_auroc": 0.9599,
+        "pixel_auroc": 0.9666,
+        "pro_metric_fpr_030": 0.8615,
+        "f1_optimal_threshold": 1.5172,
+        "max_f1": 0.9483
+      }
+    },
+    "wide_resnet50_2_coreset_1pct": {
+      "backbone": "wide_resnet50_2",
+      "coreset_sampling_ratio": 0.01,
+      "memory_bank_shape": [
+        2069,
+        1024
+      ],
+      "e2e_latency": {
+        "mean_ms": 186.3,
+        "p50_ms": 185.3,
+        "p90_ms": 193.8,
+        "p95_ms": 195.6,
+        "fps": 5.37,
+        "target_sla_50ms_met": false
+      },
+      "metrics": {
+        "image_auroc": 0.9791,
+        "pixel_auroc": 0.9708,
+        "pro_metric_fpr_030": 0.8767,
+        "f1_optimal_threshold": 0.9948,
+        "max_f1": 0.983
+      }
+    }
+  },
+  "test_breakdown": {
+    "bent": {
+      "count": 12,
+      "mean_score": 1.8292,
+      "min_score": 1.5814,
+      "max_score": 2.0891
+    },
+    "broken": {
+      "count": 12,
+      "mean_score": 1.9977,
+      "min_score": 1.8036,
+      "max_score": 2.2134
+    },
+    "glue": {
+      "count": 11,
+      "mean_score": 1.689,
+      "min_score": 1.3978,
+      "max_score": 2.1417
+    },
+    "good": {
+      "count": 21,
+      "mean_score": 1.4673,
+      "min_score": 1.3918,
+      "max_score": 1.618
+    },
+    "metal_contamination": {
+      "count": 11,
+      "mean_score": 1.8706,
+      "min_score": 1.5218,
+      "max_score": 2.2141
+    },
+    "thread": {
+      "count": 11,
+      "mean_score": 1.8184,
+      "min_score": 1.5482,
+      "max_score": 2.1026
+    }
+  }
+}

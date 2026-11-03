@@ -46,7 +46,7 @@ class PatchCoreConfig:
     coreset_sampling_ratio: float = 0.10
     coreset_projection_dim: int = 128
     n_neighbors: int = 9
-    blur_sigma: float = 4.0
+    blur_sigma: float = 1.5
     seed: int = 42
 
     @classmethod
@@ -86,8 +86,16 @@ def preprocess_numpy(
     image: Union[str, Path, Image.Image, np.ndarray], resize: int, crop: int
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Return (contiguous float32 array 1x3xHxW, display RGB uint8 HxWx3)."""
-    pil = resize_center_crop(load_rgb(image), resize, crop)
-    rgb = np.asarray(pil, dtype=np.uint8)
+    if (
+        isinstance(image, np.ndarray)
+        and image.ndim == 3
+        and image.shape == (crop, crop, 3)
+        and image.dtype == np.uint8
+    ):
+        rgb = image
+    else:
+        pil = resize_center_crop(load_rgb(image), resize, crop)
+        rgb = np.asarray(pil, dtype=np.uint8)
     norm = (rgb.astype(np.float32) * (1.0 / 255.0) - _MEAN_NP) * _INV_STD_NP
     chw = np.ascontiguousarray(norm.transpose(2, 0, 1)[None, ...], dtype=np.float32)
     return chw, rgb
@@ -245,6 +253,8 @@ class PatchCoreInferenceEngine:
         self.calibration: Dict[str, Any] = {}
         self.metadata: Dict[str, Any] = {}
         self.last_latency_ms: float = 0.0
+        self._last_patches_np: Optional[np.ndarray] = None
+        self._last_rgb: Optional[np.ndarray] = None
 
     # ------------------------------------------------- ONNX + FAISS setup
     def setup_onnx_faiss(
@@ -260,8 +270,9 @@ class PatchCoreInferenceEngine:
         nt = num_threads or self.num_threads
         self.num_threads = nt
 
-        # 1. Configure FAISS IndexFlatL2 with physical core count and SIMD BLAS threshold
-        faiss.omp_set_num_threads(nt)
+        # 1. Configure FAISS IndexFlatL2 with optimal thread count and SIMD BLAS threshold
+        faiss_threads = min(2, nt) if self.memory_bank.shape[0] <= 4096 else nt
+        faiss.omp_set_num_threads(faiss_threads)
         if hasattr(faiss, "cvar") and hasattr(faiss.cvar, "distance_compute_blas_threshold"):
             faiss.cvar.distance_compute_blas_threshold = 1
         self.memory_bank_np = np.ascontiguousarray(self.memory_bank.detach().cpu().numpy(), dtype=np.float32)
@@ -274,9 +285,15 @@ class PatchCoreInferenceEngine:
             self.onnx_path = Path(onnx_path)
         if self.onnx_path is None or not self.onnx_path.exists():
             cat = self.calibration.get("category") or self.metadata.get("category") or "bottle"
-            default_onnx = Path(__file__).resolve().parent.parent / "weights" / f"backbone_{cat}.onnx"
-            if default_onnx.exists():
-                self.onnx_path = default_onnx
+            weights_dir = Path(__file__).resolve().parent.parent / "weights"
+            candidates = [
+                weights_dir / f"backbone_{cat}_{self.config.backbone}.onnx",
+                weights_dir / f"backbone_{cat}.onnx",
+            ]
+            for cand in candidates:
+                if cand.exists():
+                    self.onnx_path = cand
+                    break
 
         if self.onnx_path is not None and self.onnx_path.exists():
             sess_options = ort.SessionOptions()
@@ -310,6 +327,36 @@ class PatchCoreInferenceEngine:
         emb = self.ort_session.run(["patch_embeddings"], {"input": batch_np})[0]
         self.feature_hw = (int(emb.shape[-2]), int(emb.shape[-1]))
         return emb
+
+    def extract_patch_vectors_onnx(
+        self,
+        image: Union[str, Path, Image.Image, np.ndarray],
+        reuse_cached: bool = True,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Extract flattened (N_patches, D) float32 patch vectors via ONNX backbone."""
+        cfg = self.config
+        batch_np, rgb = preprocess_numpy(image, cfg.resize, cfg.crop)
+        if (
+            reuse_cached
+            and self._last_patches_np is not None
+            and self._last_rgb is not None
+            and self._last_rgb.shape == rgb.shape
+            and np.array_equal(self._last_rgb, rgb)
+        ):
+            return self._last_patches_np, rgb
+
+        if self.ort_session is not None:
+            emb_np = self.embed_onnx(batch_np)
+        else:
+            emb_np = self.embed(torch.from_numpy(batch_np)).detach().cpu().numpy()
+
+        patches_np = np.ascontiguousarray(
+            emb_np[0].transpose(1, 2, 0).reshape(-1, emb_np.shape[1]),
+            dtype=np.float32,
+        )
+        self._last_patches_np = patches_np
+        self._last_rgb = rgb
+        return patches_np, rgb
 
     # --------------------------------------------------------------------- fit
     def fit(self, image_paths: Sequence[Union[str, Path]], batch_size: int = 8, verbose: bool = True) -> Dict[str, Any]:
@@ -423,12 +470,16 @@ class PatchCoreInferenceEngine:
                 emb_np[0].transpose(1, 2, 0).reshape(-1, emb_np.shape[1]),
                 dtype=np.float32,
             )
+            self._last_patches_np = patches_np
+            self._last_rgb = rgb
             patch_scores_np, score = self._nearest_and_score_faiss(patches_np)
             amap = self._anomaly_map(patch_scores_np, (cfg.crop, cfg.crop))
         else:
             tensor, rgb = preprocess(image, cfg.resize, cfg.crop)
             emb = self.embed(tensor)
             patches = emb[0].permute(1, 2, 0).reshape(-1, emb.shape[1])
+            self._last_patches_np = np.ascontiguousarray(patches.detach().cpu().numpy(), dtype=np.float32)
+            self._last_rgb = rgb
             patch_scores, nn_idx = self._nearest(patches)
             score = self._image_score(patches, patch_scores, nn_idx)
             amap = self._anomaly_map(patch_scores, (cfg.crop, cfg.crop))
@@ -453,6 +504,18 @@ class PatchCoreInferenceEngine:
         if hi <= lo:
             return np.zeros_like(amap)
         return np.clip((amap - lo) / (hi - lo), 0.0, 1.0).astype(np.float32)
+
+    def incorporate_normal_sample(
+        self,
+        image_path_or_array: Union[str, Path, Image.Image, np.ndarray],
+        category: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """Incorporate an operator-approved sample into this engine's FAISS index & memory bank."""
+        from src.models.active_learning import incorporate_normal_sample as _incorporate
+
+        cat = category or str(self.calibration.get("category") or self.metadata.get("category") or "bottle")
+        return _incorporate(image_path_or_array, category=cat, engine=self, **kwargs)
 
     # ------------------------------------------------------------- persistence
     def save(self, path: Union[str, Path]) -> Path:
@@ -493,9 +556,14 @@ class PatchCoreInferenceEngine:
         resolved_onnx = Path(onnx_path) if onnx_path else None
         if engine_type == "onnx_faiss" and resolved_onnx is None:
             cat = calib.get("category") or meta.get("category") or "bottle"
-            candidate = Path(path).resolve().parent / f"backbone_{cat}.onnx"
-            if candidate.exists():
-                resolved_onnx = candidate
+            parent_dir = Path(path).resolve().parent
+            for cand in (
+                parent_dir / f"backbone_{cat}_{cfg.backbone}.onnx",
+                parent_dir / f"backbone_{cat}.onnx",
+            ):
+                if cand.exists():
+                    resolved_onnx = cand
+                    break
 
         engine = cls(
             cfg,
@@ -533,7 +601,7 @@ def load_config_yaml(path: Union[str, Path]) -> Tuple[PatchCoreConfig, Dict[str,
         coreset_sampling_ratio=float(m.get("coreset_sampling_ratio", 0.10)),
         coreset_projection_dim=int(m.get("coreset_projection_dim", 128)),
         n_neighbors=int(m.get("n_neighbors", 9)),
-        blur_sigma=float(p.get("blur_sigma", 4.0)),
+        blur_sigma=float(p.get("blur_sigma", 1.5)),
         seed=int(raw.get("project", {}).get("seed", 42)),
     )
     return cfg, raw

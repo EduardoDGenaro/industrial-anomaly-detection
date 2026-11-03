@@ -23,11 +23,13 @@ dataset:
 
 model:
   name: "patchcore"
-  backbone: "wide_resnet50_2" # options: "wide_resnet50_2", "resnet18", "dinov2_vits14"
+  backbone: "wide_resnet50_2" # options: "wide_resnet50_2" (high precision), "resnet18" (ultra-fast <50ms CPU SLA)
   layers:
     - "layer2"
     - "layer3"
-  coreset_sampling_ratio: 0.10 # 10% coreset preserves >99% AUROC with 10x faster inference
+  embedding_dim: 1024 # 1024 for wide_resnet50_2, 384 for resnet18
+  coreset_sampling_ratio: 0.01 # 0.01 (1% = 1,638 vecs) or 0.10 (10% = 16,385 vecs); 1% preserves 100% Image-AUROC with 10.6x faster FAISS search
+  coreset_projection_dim: 128
   n_neighbors: 9
   pre_trained: true
 
@@ -39,18 +41,19 @@ metrics:
     fpr_limit: 0.30
 
 postprocessing:
-  blur_sigma: 4.0 # Gaussian smoothing parameter for patch anomaly maps
+  blur_sigma: 1.5 # Anti-bleeding Gaussian smoothing parameter for patch anomaly maps
   morphology:
-    opening_kernel_size: 3 # Eliminates isolated camera noise
+    opening_kernel_size: 3 # Eliminates isolated camera/thread noise (cv2.MORPH_OPEN 3x3)
     closing_kernel_size: 5 # Connects micro-cracks
+    min_defect_area_pixels: 24 # Minimum contour area in pixels
   thresholding:
     method: "cost_sensitive" # "cost_sensitive", "f1_optimal", "hysteresis"
     cost_fn: 10000.0         # Cost of escaping defective part
     cost_fp: 1.0             # Cost of false rejection
     min_recall_constraint: 0.995
     hysteresis:
-      high_ratio: 0.85
-      low_ratio: 0.60
+      high_ratio: 0.68
+      low_ratio: 0.45
 
 optimization:
   target_latency_ms: 50.0

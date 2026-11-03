@@ -62,6 +62,39 @@ MVTEC_EXPECTED_COUNTS: Dict[str, Dict[str, Dict[str, int]]] = {
         "train": {"good": 209},
         "test": {"good": 20, "broken_large": 20, "broken_small": 22, "contamination": 21},
     },
+    "grid": {
+        "train": {"good": 264},
+        "test": {
+            "good": 21,
+            "bent": 12,
+            "broken": 12,
+            "glue": 11,
+            "metal_contamination": 11,
+            "thread": 11,
+        },
+    },
+    "screw": {
+        "train": {"good": 320},
+        "test": {
+            "good": 41,
+            "manipulated_front": 24,
+            "scratch_head": 24,
+            "scratch_neck": 25,
+            "thread_side": 23,
+            "thread_top": 23,
+        },
+    },
+    "leather": {
+        "train": {"good": 245},
+        "test": {
+            "good": 32,
+            "color": 19,
+            "cut": 19,
+            "fold": 17,
+            "glue": 19,
+            "poke": 18,
+        },
+    },
 }
 
 IMAGE_EXTENSIONS: Tuple[str, ...] = (".png", ".jpg", ".jpeg", ".bmp")

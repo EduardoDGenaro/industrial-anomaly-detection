@@ -88,3 +88,9 @@ anomalib_results/
 # Streamlit
 .streamlit/
 
+# AI / IDE Assistants
+.agents/
+.cursor/
+.claude/
+.codex/
+

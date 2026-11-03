@@ -15,8 +15,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List
@@ -28,6 +30,61 @@ if str(ROOT) not in sys.path:
 from src.dataset.mvtec import MVTEC_CATEGORIES, validate_category  # noqa: E402
 
 DEFAULT_DATASET = "ipythonx/mvtec-ad"
+HF_DATASET = "foersben/mvtec-ad"
+
+
+def list_hf_category_files(category: str) -> List[str]:
+    """List all file paths under ``category/`` from the HuggingFace MVTec AD mirror."""
+    url = f"https://huggingface.co/api/datasets/{HF_DATASET}/tree/main/{category}?recursive=true&limit=1000"
+    req = urllib.request.Request(url, headers={"User-Agent": "mvtec-downloader/1.0"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        items = json.loads(resp.read().decode("utf-8"))
+    return [item["path"] for item in items if item.get("type") == "file"]
+
+
+def download_from_hf(category: str, root: Path, workers: int = 16) -> bool:
+    """Fast parallel download of a single MVTec AD category from HuggingFace CDN."""
+    try:
+        files = list_hf_category_files(category)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[WARNING] HF mirror listing failed ({exc}), falling back to Kaggle API...")
+        return False
+
+    if not files:
+        return False
+
+    print(f"[INFO] {len(files)} files found for '{category}'. Downloading to {root / category} ...")
+
+    def _dl(rel_path: str) -> str:
+        dest = root / rel_path
+        if dest.exists() and dest.stat().st_size > 0:
+            return rel_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        url = f"https://huggingface.co/datasets/{HF_DATASET}/resolve/main/{rel_path}"
+        delay = 1.0
+        for attempt in range(6):
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "mvtec-downloader/1.0"})
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    data = r.read()
+                dest.write_bytes(data)
+                return rel_path
+            except Exception:  # noqa: BLE001
+                if attempt == 5:
+                    raise
+                time.sleep(delay)
+                delay = min(delay * 2, 15.0)
+        return rel_path
+
+    done = 0
+    with ThreadPoolExecutor(max_workers=max(workers, 16)) as pool:
+        futures = {pool.submit(_dl, f): f for f in files}
+        for fut in as_completed(futures):
+            fut.result()
+            done += 1
+            if done % 50 == 0 or done == len(files):
+                print(f"  {done}/{len(files)}")
+    return True
 
 
 def list_category_files(api, dataset: str, category: str) -> List[str]:
@@ -53,12 +110,17 @@ def main() -> int:
     parser.add_argument("--workers", type=int, default=2, help="Parallel downloads (Kaggle rate-limits >2-3).")
     args = parser.parse_args()
 
+    root = Path(args.root).resolve()
+    if download_from_hf(args.category, root, workers=args.workers):
+        report = validate_category(root, args.category)
+        print(report.summary())
+        return 0 if report.ok else 2
+
     from kaggle.api.kaggle_api_extended import KaggleApi
 
     api = KaggleApi()
     api.authenticate()
 
-    root = Path(args.root).resolve()
     print(f"[INFO] Listing '{args.category}/' files in Kaggle dataset '{args.dataset}'...")
     names = list_category_files(api, args.dataset, args.category)
     if not names:
