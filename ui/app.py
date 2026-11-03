@@ -1037,16 +1037,25 @@ if not category_ready or model is None:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# Controles de Esteira (Barra Horizontal Compacta e Unificada)
+# Controles de Esteira (Barra Horizontal com Filtro de Tipo de Dano)
 # -----------------------------------------------------------------------------
 data_dir = DATA_ROOT / category / "test"
 selected_img_path: Optional[Path] = None
 uploaded_image: Optional[Image.Image] = None
 selected_defect_type = "unknown"
-option_keys: List[str] = []
+defect_filter_key = f"conveyor_defect_filter_{category}"
 state_key = f"conveyor_sample_{category}"
 
-defect_folders = sorted(p for p in data_dir.iterdir() if p.is_dir()) if data_dir.is_dir() else []
+# Ordena pastas colocando 'good' (Peça Perfeita) no topo e em seguida os tipos de defeito
+defect_folders = (
+    sorted(
+        [p for p in data_dir.iterdir() if p.is_dir()],
+        key=lambda p: (0 if p.name == "good" else 1, p.name),
+    )
+    if data_dir.is_dir()
+    else []
+)
+
 options_map: Dict[str, Tuple[Path, str]] = {}
 for folder in defect_folders:
     friendly_cat = translate_defect(folder.name)
@@ -1056,33 +1065,77 @@ for folder in defect_folders:
         options_map[label_display] = (img, folder.name)
 
 if options_map:
-    option_keys = list(options_map.keys())
-    if state_key not in st.session_state or st.session_state[state_key] not in option_keys:
-        st.session_state[state_key] = option_keys[0]
+    # Opções do seletor de tipo de dano (Peça Perfeita, Tipos de Falha ou Todas)
+    total_samples = len(options_map)
+    filter_options: Dict[str, Optional[str]] = {f"Todos os Tipos ({total_samples})": None}
+    for folder in defect_folders:
+        friendly = translate_defect(folder.name)
+        cnt = sum(1 for _, (_, folder_name) in options_map.items() if folder_name == folder.name)
+        filter_options[f"{friendly} ({cnt})"] = folder.name
 
-    def _next_conveyor_piece() -> None:
-        curr_idx = option_keys.index(st.session_state[state_key])
-        st.session_state[state_key] = option_keys[(curr_idx + 1) % len(option_keys)]
-
-    def _random_conveyor_piece() -> None:
-        if len(option_keys) > 1:
-            candidates = [k for k in option_keys if k != st.session_state[state_key]]
-            st.session_state[state_key] = random.choice(candidates)
+    filter_option_labels = list(filter_options.keys())
+    if (
+        defect_filter_key not in st.session_state
+        or st.session_state[defect_filter_key] not in filter_option_labels
+    ):
+        st.session_state[defect_filter_key] = filter_option_labels[0]
 
     with st.container(border=True):
-        sel_col, btn_next_col, btn_rand_col, pop_up_col = st.columns(
-            [3.2, 1.3, 1.0, 1.1], gap="small", vertical_alignment="top"
+        filter_col, sel_col, btn_next_col, btn_rand_col, pop_up_col = st.columns(
+            [2.0, 2.6, 1.1, 1.0, 1.0], gap="small", vertical_alignment="top"
         )
+
+        with filter_col:
+            chosen_filter_label = st.selectbox(
+                "Tipo de Dano:",
+                options=filter_option_labels,
+                key=defect_filter_key,
+                label_visibility="collapsed",
+                help="Selecione um tipo de dano específico (ex: Peça Perfeita, Amassamento/Compressão, Furo) ou veja todas as peças.",
+            )
+            clean_filter_name = chosen_filter_label.split(" (")[0]
+            _render_html(
+                f"""
+                <div class="conveyor-micro-progress">
+                    <span>Condição: <strong>{html.escape(clean_filter_name)}</strong></span>
+                </div>
+                """
+            )
+
+        target_folder = filter_options[chosen_filter_label]
+        if target_folder is not None:
+            active_options_map = {
+                k: v for k, v in options_map.items() if v[1] == target_folder
+            }
+        else:
+            active_options_map = options_map
+
+        active_option_keys = list(active_options_map.keys())
+
+        # Assegura que a peça selecionada pertença estritamente ao filtro ativo
+        if state_key not in st.session_state or st.session_state[state_key] not in active_option_keys:
+            st.session_state[state_key] = active_option_keys[0]
+
+        def _next_conveyor_piece() -> None:
+            if active_option_keys:
+                curr_idx = active_option_keys.index(st.session_state[state_key])
+                st.session_state[state_key] = active_option_keys[(curr_idx + 1) % len(active_option_keys)]
+
+        def _random_conveyor_piece() -> None:
+            if len(active_option_keys) > 1:
+                candidates = [k for k in active_option_keys if k != st.session_state[state_key]]
+                st.session_state[state_key] = random.choice(candidates)
+
         with sel_col:
             chosen_key = st.selectbox(
                 "Amostra na esteira:",
-                options=option_keys,
+                options=active_option_keys,
                 key=state_key,
                 label_visibility="collapsed",
                 help="Selecione a peça na esteira para leitura óptica",
             )
-            current_pos = option_keys.index(chosen_key) + 1
-            total_pos = len(option_keys)
+            current_pos = active_option_keys.index(chosen_key) + 1
+            total_pos = len(active_option_keys)
             progress_pct = (current_pos / max(total_pos, 1)) * 100.0
             _render_html(
                 f"""
@@ -1094,20 +1147,21 @@ if options_map:
                 </div>
                 """
             )
+
         with btn_next_col:
             st.button(
                 "Próxima",
                 on_click=_next_conveyor_piece,
                 type="primary",
                 width="stretch",
-                help="Avança sequencialmente para a próxima peça do lote",
+                help="Avança sequencialmente para a próxima peça dentro da condição filtrada",
             )
         with btn_rand_col:
             st.button(
                 "Sortear",
                 on_click=_random_conveyor_piece,
                 width="stretch",
-                help="Sorteia aleatoriamente outra peça da linha",
+                help="Sorteia aleatoriamente outra peça dentro da condição filtrada",
             )
         with pop_up_col:
             with st.popover("Upload", help="Enviar foto de peça externa do computador", width="stretch"):
@@ -1120,7 +1174,7 @@ if options_map:
                     uploaded_image = Image.open(file_up).convert("RGB")
                     selected_defect_type = "uploaded_inspection"
 
-        selected_img_path, selected_defect_type_fallback = options_map[chosen_key]
+        selected_img_path, selected_defect_type_fallback = active_options_map[chosen_key]
         if uploaded_image is None:
             selected_defect_type = selected_defect_type_fallback
 else:
