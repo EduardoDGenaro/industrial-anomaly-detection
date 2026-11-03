@@ -1182,12 +1182,21 @@ if active_image is not None:
     is_rejected = raw_score >= threshold
     friendly_real_condition = translate_defect(selected_defect_type)
 
+    # Mapa termico calibrado globalmente (previne alarmes falsos vermelhos em pecas aprovadas)
+    calibrated_norm_map = model.normalize_map(raw_map)
+    calibrated_norm_map[fg_mask == 0] = 0.0
+
+    if not is_rejected:
+        # Em pecas aprovadas, suprime mascaras e caixas de defeito residuais
+        filtered_mask = np.zeros_like(filtered_mask)
+        defect_regions = []
+
     # Mapa térmico semitransparente (alpha = 0.50) sobre base em tons de cinza/cor da peça
-    blended_overlay = build_commercial_heatmap_overlay(img_rgb, norm_map, alpha=0.50)
+    blended_overlay = build_commercial_heatmap_overlay(img_rgb, calibrated_norm_map, alpha=0.50)
 
     # Imagem demarcada com contorno exato + bounding box
     annotated_rgb, active_regions, caption_3 = build_defect_demarcation_image(
-        img_rgb, filtered_mask, defect_regions, norm_map, is_rejected, post_processor
+        img_rgb, filtered_mask, defect_regions, calibrated_norm_map, is_rejected, post_processor
     )
 
     backend_pipeline_ms = (time.perf_counter() - t_cycle_start) * 1000.0

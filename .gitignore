@@ -73,22 +73,52 @@ data/mvtec/*
 data/mvtec/bottle/*
 !data/mvtec/bottle/test
 
+!data/mvtec/capsule
+data/mvtec/capsule/*
+!data/mvtec/capsule/test
+data/mvtec/capsule/test/*/*
+!data/mvtec/capsule/test/*/00[0-1].png
+
+!data/mvtec/grid
+data/mvtec/grid/*
+!data/mvtec/grid/test
+data/mvtec/grid/test/*/*
+!data/mvtec/grid/test/*/00[0-1].png
+
+!data/mvtec/leather
+data/mvtec/leather/*
+!data/mvtec/leather/test
+data/mvtec/leather/test/*/*
+!data/mvtec/leather/test/*/00[0-1].png
+
+!data/mvtec/metal_nut
+data/mvtec/metal_nut/*
+!data/mvtec/metal_nut/test
+data/mvtec/metal_nut/test/*/*
+!data/mvtec/metal_nut/test/*/00[0-1].png
+
+!data/mvtec/screw
+data/mvtec/screw/*
+!data/mvtec/screw/test
+data/mvtec/screw/test/*/*
+!data/mvtec/screw/test/*/00[0-1].png
+
 # Checkpoints, Weights & Run Artifacts
 checkpoints/
 weights/*
 !weights/.gitkeep
-!weights/patchcore_bottle_resnet18_1pct.pt
-!weights/backbone_bottle_resnet18.onnx
+!weights/patchcore_*_resnet18_1pct.pt
+!weights/backbone_*_resnet18.onnx
 
 runs/
 results/
 logs/
 *.ckpt
 *.pt
-!weights/patchcore_bottle_resnet18_1pct.pt
+!weights/patchcore_*_resnet18_1pct.pt
 *.pth
 *.onnx
-!weights/backbone_bottle_resnet18.onnx
+!weights/backbone_*_resnet18.onnx
 *.engine
 *.bin
 
@@ -97,7 +127,8 @@ results/
 anomalib_results/
 
 # Streamlit
-.streamlit/
+.streamlit/*
+!.streamlit/config.toml
 
 # AI / IDE Assistants
 .agents/
@@ -105,4 +136,3 @@ anomalib_results/
 .claude/
 .codex/
 GEMINI.md
-

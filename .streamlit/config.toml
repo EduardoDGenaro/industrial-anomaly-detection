@@ -1,0 +1,24 @@
+[theme]
+base = "dark"
+primaryColor = "#2563eb"
+backgroundColor = "#090d16"
+secondaryBackgroundColor = "#111827"
+textColor = "#f8fafc"
+borderColor = "#1e293b"
+dataframeBorderColor = "#1e293b"
+dataframeHeaderBackgroundColor = "#111827"
+dataframeHeaderTextColor = "#cbd5e1"
+showWidgetBorder = true
+showSidebarBorder = true
+baseRadius = "0.55rem"
+buttonRadius = "0.45rem"
+greenColor = "#10b981"
+redColor = "#ef4444"
+yellowColor = "#f59e0b"
+blueColor = "#2563eb"
+
+[theme.sidebar]
+backgroundColor = "#070a12"
+secondaryBackgroundColor = "#0f172a"
+textColor = "#f1f5f9"
+borderColor = "#1e293b"
