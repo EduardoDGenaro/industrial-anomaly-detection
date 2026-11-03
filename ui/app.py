@@ -147,8 +147,13 @@ def has_test_samples(cat: str) -> bool:
 
 def is_category_ready(cat: str) -> bool:
     """Escaneia weights/ e data/mvtec/ em tempo real para definir se a classe está [Pronto]."""
-    main_weight = WEIGHTS_DIR / f"patchcore_{cat}.pt"
-    return main_weight.is_file() and has_test_samples(cat)
+    weights_candidates = [
+        WEIGHTS_DIR / f"patchcore_{cat}.pt",
+        WEIGHTS_DIR / f"patchcore_{cat}_resnet18_1pct.pt",
+        WEIGHTS_DIR / f"patchcore_{cat}_1pct.pt",
+    ]
+    has_weights = any(w.is_file() for w in weights_candidates)
+    return has_weights and has_test_samples(cat)
 
 
 def discover_dynamic_categories() -> List[str]:
@@ -193,10 +198,11 @@ def resolve_available_profiles(category: str) -> Dict[str, Tuple[str, Optional[s
     w50_o = WEIGHTS_DIR / f"backbone_{category}.onnx"
 
     if r18_w.is_file():
+        use_onnx = bool(r18_o and r18_o.is_file())
         profiles["Ultra Rápido (Otimizado Edge / 1% Coreset)"] = (
             str(r18_w),
-            str(r18_o) if r18_o.is_file() else None,
-            "onnx_faiss",
+            str(r18_o) if use_onnx else None,
+            "onnx_faiss" if use_onnx else "pytorch",
             "edge_fast",
         )
 

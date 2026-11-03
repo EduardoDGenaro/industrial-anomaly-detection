@@ -67,17 +67,28 @@ Thumbs.db
 # Datasets (MVTec AD is heavy, download into data/ but do not commit)
 data/*
 !data/.gitkeep
+!data/mvtec
+data/mvtec/*
+!data/mvtec/bottle
+data/mvtec/bottle/*
+!data/mvtec/bottle/test
 
 # Checkpoints, Weights & Run Artifacts
 checkpoints/
-weights/
+weights/*
+!weights/.gitkeep
+!weights/patchcore_bottle_resnet18_1pct.pt
+!weights/backbone_bottle_resnet18.onnx
+
 runs/
 results/
 logs/
 *.ckpt
 *.pt
+!weights/patchcore_bottle_resnet18_1pct.pt
 *.pth
 *.onnx
+!weights/backbone_bottle_resnet18.onnx
 *.engine
 *.bin
 
