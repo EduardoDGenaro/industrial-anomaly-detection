@@ -1764,9 +1764,9 @@ if active_image is not None:
             """
         )
 
-    act_col1, act_col2 = st.columns([1.0, 1.0], gap="small")
-    with act_col1:
-        if is_rejected:
+    if is_rejected:
+        act_col1, act_col2 = st.columns([1.0, 1.0], gap="small")
+        with act_col1:
             if st.button(
                 "Contestar Falso Alarme (Homologar como Variação Aceitável)",
                 key=f"btn_open_contest_{category}",
@@ -1776,25 +1776,18 @@ if active_image is not None:
             ):
                 st.session_state["contest_confirm_open"] = True
                 st.session_state["contest_target_sample"] = active_sample_id
-        else:
-            st.button(
-                "Peça em Conformidade (Fluxo Normal)",
-                key=f"btn_pass_notice_{category}",
-                disabled=True,
-                use_container_width=True,
-            )
 
-    with act_col2:
-        st.download_button(
-            label="Exportar Laudo Técnico de Não Conformidade (PDF)" if is_rejected else "Exportar Laudo Técnico de Inspeção (PDF)",
-            data=pdf_bytes,
-            file_name=f"laudo_{category}_{rnc_piece_id}.pdf",
-            mime="application/pdf",
-            key=f"btn_rnc_pdf_{category}_{rnc_piece_id}",
-            type="secondary",
-            use_container_width=True,
-            help="Emite o laudo técnico com evidências ópticas, hash SHA-256 e assinatura digital de conformidade.",
-        )
+        with act_col2:
+            st.download_button(
+                label="Exportar Laudo Técnico de Não Conformidade (PDF)",
+                data=pdf_bytes,
+                file_name=f"laudo_rnc_{category}_{rnc_piece_id}.pdf",
+                mime="application/pdf",
+                key=f"btn_rnc_pdf_{category}_{rnc_piece_id}",
+                type="secondary",
+                use_container_width=True,
+                help="Emite o laudo técnico de não conformidade com evidências ópticas, hash SHA-256 e assinatura digital.",
+            )
 
     if (
         is_rejected
