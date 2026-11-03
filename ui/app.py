@@ -1246,6 +1246,37 @@ threshold = st.sidebar.slider(
     help="Se o Índice de Irregularidade ultrapassar este limite, a peça será REJEITADA.",
 )
 
+# Parâmetros morfológicos e de segmentação espacial calibrados (Anti-Bleeding + Histerese + Otsu)
+use_hysteresis = True
+blur_sigma = 1.5
+opening_k = 3
+closing_k = 5
+min_defect_area_px = 24
+tau_high = 0.68
+tau_low = 0.45
+cost_fn = 10000.0
+cost_fp = 1.0
+
+if model is not None:
+    cfg = model.config
+    active_backbone_id = str(cfg.backbone)
+    active_coreset_ratio = float(cfg.coreset_sampling_ratio)
+else:
+    active_backbone_id = "unknown"
+    active_coreset_ratio = 0.01
+
+pure_ai_ms = 0.0
+backend_pipeline_ms = 0.0
+estimated_ui_total_ms = 0.0
+raw_score = 0.0
+pixel_baseline = 0.85
+pixel_threshold = 1.0
+active_regions: List[DefectRegion] = []
+friendly_real_condition = "Peça Perfeita"
+is_rejected = False
+blended_overlay = None
+annotated_rgb = None
+
 # Card de Documentação / Suporte no Rodapé da Sidebar (Requisito Vision UI)
 _render_html(
     """
@@ -1477,6 +1508,7 @@ if active_image is not None:
     t_cycle_start = time.perf_counter()
     cfg = model.config
     active_backbone_id = str(cfg.backbone)
+    active_coreset_ratio = float(cfg.coreset_sampling_ratio)
 
     # 1. Leitura e recorte óptico
     frame_rgb = np.asarray(resize_center_crop(load_rgb(active_image), cfg.resize, cfg.crop), dtype=np.uint8)
@@ -1490,10 +1522,10 @@ if active_image is not None:
 
     # 3. Pós-processamento espacial calibrado
     post_processor = AnomalyPostProcessor(
-        blur_sigma=1.5,
-        opening_kernel_size=3,
-        closing_kernel_size=5,
-        min_defect_area_pixels=24,
+        blur_sigma=blur_sigma,
+        opening_kernel_size=opening_k,
+        closing_kernel_size=closing_k,
+        min_defect_area_pixels=min_defect_area_px,
     )
     pixel_baseline = float(
         model.calibration.get(
@@ -1512,8 +1544,8 @@ if active_image is not None:
         image_rgb=img_rgb,
         pixel_baseline=pixel_baseline,
         pixel_threshold=pixel_threshold,
-        tau_high=0.68,
-        tau_low=0.45,
+        tau_high=tau_high,
+        tau_low=tau_low,
         use_foreground_mask=True,
     )
 
@@ -1534,6 +1566,7 @@ if active_image is not None:
     )
 
     backend_pipeline_ms = (time.perf_counter() - t_cycle_start) * 1000.0
+    estimated_ui_total_ms = backend_pipeline_ms + 145.0
     speed_status = f"{pure_ai_ms:.1f} ms IA | {backend_pipeline_ms:.1f} ms Total"
 
     # -------------------------------------------------------------------------
