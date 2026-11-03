@@ -4,7 +4,6 @@
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Framework](https://img.shields.io/badge/Framework-Anomalib%20%7C%20PyTorch-orange.svg)](https://github.com/openvinotoolkit/anomalib)
 [![Dataset](https://img.shields.io/badge/Dataset-MVTec%20AD%20(15%20classes)-green.svg)](https://www.mvtec.com/company/research/datasets/mvtec-ad)
-[![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey.svg)](LICENSE)
 
 ---
 
