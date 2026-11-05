@@ -418,35 +418,166 @@ _render_html(
         background: rgba(7, 12, 39, 0.75) !important;
         backdrop-filter: blur(20px) !important;
         -webkit-backdrop-filter: blur(20px) !important;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+        border-bottom: none !important;
     }
 
     .block-container {
-        padding-top: 4.2rem !important;
-        padding-bottom: 3.0rem !important;
+        padding-top: 2.8rem !important;
+        padding-bottom: 2.0rem !important;
         max-width: 1540px !important;
     }
 
-    /* Sidebar Flutuante com Glassmorphism */
+    /* Sidebar Flutuante com Glassmorphism - REDESENHA COMPLETA */
     [data-testid="stSidebar"] {
-        background: linear-gradient(127deg, rgba(6, 11, 40, 0.94) 28%, rgba(10, 14, 35, 0.90) 100%) !important;
-        backdrop-filter: blur(24px) !important;
-        -webkit-backdrop-filter: blur(24px) !important;
-        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+        background: linear-gradient(180deg, #0A1430 0%, #0C1535 40%, #080F2B 100%) !important;
+        backdrop-filter: blur(20px) !important;
+        -webkit-backdrop-filter: blur(20px) !important;
+        border-right: 1px solid rgba(0, 117, 255, 0.12) !important;
+        border-left: 4px solid #0075FF !important;
+        box-shadow: inset 2px 0 8px rgba(0, 117, 255, 0.3) !important;
+        position: relative !important;
+        overflow: visible !important;
+        width: 260px !important;
+    }
+
+    [data-testid="stSidebar"]::before {
+        content: "";
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 260px;
+        height: 160px;
+        background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 160" preserveAspectRatio="none"><defs><linearGradient id="wave-main" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:%23087CFF;stop-opacity:0.16"/><stop offset="100" style="stop-color:%23087CFF;stop-opacity:0"/></linearGradient></defs><path d="M0,60 Q65,30 130,60 T260,60 L260,160 L0,160 Z" fill="url(%23wave-main)" /><path d="M0,80 Q65,50 130,80 T260,80 L260,160 L0,160 Z" fill="%23087CFF" opacity="0.11" /><path d="M0,100 Q65,70 130,100 T260,100 L260,160 L0,160 Z" fill="%230A6AD8" opacity="0.08" /><path d="M0,120 Q65,90 130,120 T260,120 L260,160 L0,160 Z" fill="%230C4FA0" opacity="0.05" /></svg>');
+        background-size: 100% 100%;
+        background-position: bottom;
+        background-repeat: no-repeat;
+        pointer-events: none;
+        z-index: 1;
     }
 
     [data-testid="stSidebar"] .block-container {
-        padding-top: 1.2rem !important;
+        padding-top: 0.7rem !important;
+        padding-left: 0.80rem !important;
+        padding-right: 0.80rem !important;
+        padding-bottom: 160px !important;
+        position: relative !important;
+        z-index: 2 !important;
     }
-
-    /* Containers e Cards em Glassmorphism */
+    
+    [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
+        margin-bottom: 8px !important;
+        padding: 10px 10px !important;
+        background: rgba(12, 21, 53, 0.5) !important;
+        border: 1px solid rgba(0, 117, 255, 0.12) !important;
+        border-radius: 7px !important;
+    }
+    
+    [data-testid="stSidebar"] .stSelectbox,
+    [data-testid="stSidebar"] .stSlider {
+        margin-bottom: 7px !important;
+    }
+    
+    [data-testid="stSidebar"] label {
+        font-size: 0.73rem !important;
+        font-weight: 700 !important;
+        margin-bottom: 3px !important;
+        color: #B0C0D8 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.02em !important;
+    }
+    
+    [data-testid="stSidebar"] .stSelectbox > div > div {
+        font-size: 0.73rem !important;
+        padding: 7px 9px !important;
+        background: rgba(8, 18, 40, 0.6) !important;
+        border: 1px solid rgba(0, 117, 255, 0.18) !important;
+        border-radius: 5px !important;
+        color: #E0E8F0 !important;
+    }
+    
+    [data-testid="stSidebar"] .stSelectbox > div > div:hover {
+        background: rgba(10, 22, 45, 0.75) !important;
+        border-color: rgba(8, 124, 255, 0.3) !important;
+    }
+    
+    /* Sidebar Slider Customizado */
+    [data-testid="stSidebar"] .stSlider {
+        margin-bottom: 12px !important;
+        width: 100% !important;
+    }
+    
+    [data-testid="stSidebar"] .stSlider > div {
+        width: 100% !important;
+    }
+    
+    [data-testid="stSidebar"] .stSlider > div > div {
+        padding-top: 2px !important;
+        padding-bottom: 6px !important;
+        width: 100% !important;
+        overflow: visible !important;
+    }
+    
+    [data-testid="stSidebar"] .stSlider label {
+        font-size: 0.73rem !important;
+        margin-bottom: 8px !important;
+        font-weight: 700 !important;
+        display: block !important;
+        width: 100% !important;
+    }
+    
+    /* Sidebar Docs Card - Compacto */
+    .vision-sidebar-docs {
+        background: linear-gradient(127deg, rgba(0, 117, 255, 0.12) 0%, rgba(6, 11, 40, 0.70) 100%);
+        border: 1px solid rgba(0, 117, 255, 0.25);
+        border-radius: 12px;
+        padding: 12px 14px;
+        margin-top: 12px;
+        text-align: center;
+    }
+    
+    .vision-sidebar-docs-art {
+        margin-bottom: 8px;
+        height: 35px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .vision-sidebar-docs-txt {
+        font-size: 0.76rem;
+        color: #A0AEC0;
+        line-height: 1.35;
+        margin-bottom: 10px;
+    }
+    
+    .vision-sidebar-docs-btn {
+        background: linear-gradient(135deg, #0075FF 0%, #1753FF 100%);
+        border: none;
+        color: #FFFFFF;
+        font-size: 0.75rem;
+        font-weight: 700;
+        padding: 8px 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        box-shadow: 0px 4px 12px rgba(0, 117, 255, 0.3);
+        transition: all 0.15s ease;
+        width: 100%;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+    
+    .vision-sidebar-docs-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0px 6px 16px rgba(0, 117, 255, 0.45);
+    }
     [data-testid="stVerticalBlockBorderWrapper"] {
         background: var(--vision-card-bg) !important;
         backdrop-filter: blur(20px) !important;
         -webkit-backdrop-filter: blur(20px) !important;
         border: var(--vision-card-border) !important;
-        border-radius: var(--vision-radius-card) !important;
+        border-radius: 18px !important;
         box-shadow: var(--vision-shadow) !important;
+        padding: 14px 16px !important;
     }
 
     /* Inputs, Selectboxes e Sliders */
@@ -520,13 +651,13 @@ _render_html(
 
     /* Moldura das Imagens */
     [data-testid="stImage"] img {
-        border-radius: 14px !important;
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 12px !important;
+        border: 1px solid rgba(255, 255, 255, 0.06) !important;
     }
     [data-testid="stImageCaption"] {
         color: var(--vision-text-secondary) !important;
-        font-size: 0.78rem !important;
-        margin-top: 6px !important;
+        font-size: 0.75rem !important;
+        margin-top: 5px !important;
         font-weight: 500 !important;
     }
 
@@ -538,78 +669,79 @@ _render_html(
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 16px;
-        margin-top: 6px;
-        margin-bottom: 20px;
-        padding-top: 2px;
-        flex-wrap: wrap;
+        gap: 20px;
+        margin-top: 0px;
+        margin-bottom: 16px;
+        padding-top: 0px;
+        flex-wrap: nowrap;
     }
     .vision-breadcrumb {
         display: flex;
         align-items: center;
-        gap: 8px;
-        font-size: 0.82rem;
-        line-height: 1.5;
+        gap: 6px;
+        font-size: 0.76rem;
+        line-height: 1.4;
         color: var(--vision-text-secondary);
-        margin-bottom: 6px;
+        margin-bottom: 4px;
     }
     .vision-breadcrumb-root {
         color: var(--vision-text-secondary);
     }
     .vision-breadcrumb-sep {
-        opacity: 0.4;
+        opacity: 0.5;
     }
     .vision-breadcrumb-curr {
         color: var(--vision-text-primary);
-        font-weight: 600;
+        font-weight: 700;
     }
     .vision-page-title {
-        font-size: 1.35rem;
+        font-size: 1.60rem;
         font-weight: 800;
         color: var(--vision-text-primary);
-        letter-spacing: -0.02em;
+        letter-spacing: -0.03em;
+        margin-top: 0px;
     }
     .vision-topbar-right {
         display: flex;
         align-items: center;
-        gap: 12px;
-        flex-wrap: wrap;
+        gap: 10px;
+        flex-wrap: nowrap;
     }
     .vision-search-box {
         display: flex;
         align-items: center;
         gap: 8px;
-        background: rgba(15, 21, 53, 0.65);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(15, 21, 53, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: var(--vision-radius-inner);
-        padding: 6px 14px;
-        font-size: 0.82rem;
+        padding: 7px 12px;
+        font-size: 0.76rem;
         color: var(--vision-text-secondary);
     }
     .vision-status-pill {
         display: flex;
         align-items: center;
-        gap: 8px;
-        background: rgba(1, 181, 116, 0.12);
-        border: 1px solid rgba(1, 181, 116, 0.35);
-        color: #34d399;
+        gap: 6px;
+        background: rgba(1, 181, 116, 0.14);
+        border: 1px solid rgba(1, 181, 116, 0.40);
+        color: #10b981;
         font-family: var(--vision-font-mono);
-        font-size: 0.74rem;
-        font-weight: 700;
-        letter-spacing: 0.05em;
-        padding: 6px 14px;
-        border-radius: var(--vision-radius-inner);
-        box-shadow: 0px 0px 10px rgba(1, 181, 116, 0.2);
-    }
-    .vision-engine-pill {
-        background: rgba(0, 117, 255, 0.12);
-        border: 1px solid rgba(0, 117, 255, 0.35);
-        color: #60a5fa;
-        font-family: var(--vision-font-mono);
-        font-size: 0.74rem;
+        font-size: 0.72rem;
         font-weight: 700;
         letter-spacing: 0.04em;
-        padding: 6px 14px;
+        padding: 7px 12px;
+        border-radius: var(--vision-radius-inner);
+        box-shadow: 0px 0px 8px rgba(1, 181, 116, 0.18);
+    }
+    .vision-engine-pill {
+        background: rgba(0, 117, 255, 0.14);
+        border: 1px solid rgba(0, 117, 255, 0.40);
+        color: #3b82f6;
+        font-family: var(--vision-font-mono);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        padding: 7px 12px;
         border-radius: var(--vision-radius-inner);
     }
 
@@ -617,8 +749,8 @@ _render_html(
     .vision-kpi-grid {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
-        gap: 16px;
-        margin-bottom: 22px;
+        gap: 12px;
+        margin-bottom: 14px;
     }
     @media (max-width: 1024px) {
         .vision-kpi-grid {
@@ -636,56 +768,56 @@ _render_html(
         -webkit-backdrop-filter: blur(20px);
         border: var(--vision-card-border);
         border-radius: var(--vision-radius-card);
-        padding: 18px 20px;
+        padding: 16px 18px;
         box-shadow: var(--vision-shadow);
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 14px;
+        gap: 12px;
         transition: transform 0.2s ease, border-color 0.2s ease;
     }
     .vision-kpi-card:hover {
-        transform: translateY(-2px);
-        border-color: rgba(0, 117, 255, 0.35);
+        transform: translateY(-1px);
+        border-color: rgba(0, 117, 255, 0.40);
     }
     .vision-kpi-info {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 3px;
     }
     .vision-kpi-label {
-        font-size: 0.72rem;
+        font-size: 0.70rem;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.05em;
         color: var(--vision-text-secondary);
     }
     .vision-kpi-val {
-        font-size: 1.35rem;
+        font-size: 1.30rem;
         font-weight: 800;
         color: var(--vision-text-primary);
         display: flex;
         align-items: baseline;
-        gap: 8px;
+        gap: 6px;
     }
     .vision-kpi-badge {
-        font-size: 0.74rem;
+        font-size: 0.70rem;
         font-weight: 700;
         padding: 2px 6px;
-        border-radius: 6px;
+        border-radius: 5px;
     }
     .vision-kpi-badge.positive {
-        color: #01B574;
-        background: rgba(1, 181, 116, 0.12);
+        color: #10b981;
+        background: rgba(1, 181, 116, 0.14);
     }
     .vision-kpi-badge.neutral {
-        color: #60A5FA;
-        background: rgba(0, 117, 255, 0.12);
+        color: #3b82f6;
+        background: rgba(0, 117, 255, 0.14);
     }
     .vision-icon-box {
-        width: 46px;
-        height: 46px;
-        border-radius: 12px;
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
         background: linear-gradient(135deg, var(--vision-blue) 0%, var(--vision-blue-dark) 100%);
         box-shadow: var(--vision-glow-blue);
         display: flex;
@@ -702,41 +834,41 @@ _render_html(
         -webkit-backdrop-filter: blur(20px);
         border: var(--vision-card-border);
         border-radius: var(--vision-radius-card);
-        padding: 26px 30px;
+        padding: 20px 24px;
         box-shadow: var(--vision-shadow);
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 24px;
-        margin-bottom: 22px;
+        gap: 20px;
+        margin-bottom: 16px;
         position: relative;
         overflow: hidden;
     }
     .vision-hero-content {
-        max-width: 680px;
+        max-width: 650px;
         position: relative;
         z-index: 2;
     }
     .vision-hero-tag {
-        font-size: 0.72rem;
+        font-size: 0.70rem;
         font-weight: 800;
-        letter-spacing: 0.10em;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
         color: #60a5fa;
-        margin-bottom: 6px;
+        margin-bottom: 4px;
     }
     .vision-hero-title {
-        font-size: 1.45rem;
+        font-size: 1.40rem;
         font-weight: 800;
         color: #FFFFFF;
-        margin: 0 0 8px 0;
+        margin: 0 0 6px 0;
         letter-spacing: -0.02em;
     }
     .vision-hero-desc {
-        font-size: 0.86rem;
-        line-height: 1.5;
+        font-size: 0.84rem;
+        line-height: 1.4;
         color: var(--vision-text-secondary);
-        margin: 0 0 14px 0;
+        margin: 0;
     }
     .vision-hero-action {
         display: inline-flex;
@@ -766,8 +898,8 @@ _render_html(
     .vision-gauges-grid {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
-        gap: 16px;
-        margin-bottom: 22px;
+        gap: 12px;
+        margin-bottom: 14px;
     }
     @media (max-width: 768px) {
         .vision-gauges-grid {
@@ -780,16 +912,16 @@ _render_html(
         -webkit-backdrop-filter: blur(20px);
         border: var(--vision-card-border);
         border-radius: var(--vision-radius-card);
-        padding: 20px 24px;
+        padding: 16px 20px;
         display: flex;
         align-items: center;
-        gap: 20px;
+        gap: 16px;
         box-shadow: var(--vision-shadow);
     }
     .vision-gauge-svg-wrap {
         position: relative;
-        width: 88px;
-        height: 88px;
+        width: 80px;
+        height: 80px;
         flex-shrink: 0;
     }
     .vision-gauge-inner {
@@ -804,12 +936,12 @@ _render_html(
         justify-content: center;
     }
     .vision-gauge-num {
-        font-size: 1.05rem;
+        font-size: 1.00rem;
         font-weight: 800;
         color: #FFFFFF;
     }
     .vision-gauge-sub {
-        font-size: 0.58rem;
+        font-size: 0.55rem;
         font-weight: 600;
         color: var(--vision-text-secondary);
         text-transform: uppercase;
@@ -817,15 +949,15 @@ _render_html(
     .vision-gauge-text {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 2px;
     }
     .vision-gauge-title {
-        font-size: 0.96rem;
+        font-size: 0.92rem;
         font-weight: 700;
         color: #FFFFFF;
     }
     .vision-gauge-caption {
-        font-size: 0.78rem;
+        font-size: 0.75rem;
         color: var(--vision-text-secondary);
         line-height: 1.4;
     }
@@ -836,100 +968,101 @@ _render_html(
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
         border-radius: var(--vision-radius-card);
-        padding: 18px 24px;
-        margin-bottom: 20px;
+        padding: 16px 22px;
+        margin-bottom: 16px;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 20px;
+        gap: 18px;
         box-shadow: var(--vision-shadow);
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
     }
     .vision-verdict-card.verdict-pass {
-        border: 1px solid rgba(1, 181, 116, 0.45);
-        box-shadow: 0px 0px 20px rgba(1, 181, 116, 0.15);
+        border: 1.5px solid rgba(1, 181, 116, 0.50);
+        box-shadow: 0px 0px 16px rgba(1, 181, 116, 0.16);
     }
     .vision-verdict-card.verdict-fail {
-        border: 1px solid rgba(227, 26, 26, 0.45);
-        box-shadow: 0px 0px 20px rgba(227, 26, 26, 0.18);
+        border: 1.5px solid rgba(227, 26, 26, 0.50);
+        box-shadow: 0px 0px 16px rgba(227, 26, 26, 0.20);
     }
     .vision-verdict-left {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 2px;
+        min-width: fit-content;
     }
     .vision-verdict-badge {
         font-family: var(--vision-font-mono);
-        font-size: 0.95rem;
+        font-size: 0.90rem;
         font-weight: 800;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.05em;
         text-transform: uppercase;
-        padding: 6px 16px;
-        border-radius: var(--vision-radius-inner);
+        padding: 5px 12px;
+        border-radius: 5px;
         display: inline-block;
         width: fit-content;
     }
     .vision-badge-pass {
-        background: rgba(1, 181, 116, 0.18);
-        border: 1px solid #01B574;
-        color: #01B574;
-        box-shadow: var(--vision-glow-cyan);
+        background: rgba(1, 181, 116, 0.16);
+        border: 1px solid #10b981;
+        color: #10b981;
+        box-shadow: 0px 0px 10px rgba(1, 181, 116, 0.16);
     }
     .vision-badge-fail {
-        background: rgba(227, 26, 26, 0.18);
-        border: 1px solid #E31A1A;
-        color: #E31A1A;
-        box-shadow: var(--vision-glow-red);
+        background: rgba(227, 26, 26, 0.16);
+        border: 1px solid #ef4444;
+        color: #ef4444;
+        box-shadow: 0px 0px 10px rgba(227, 26, 26, 0.16);
     }
     .vision-verdict-sub {
-        font-size: 0.74rem;
+        font-size: 0.70rem;
         color: var(--vision-text-secondary);
     }
     .vision-verdict-center {
         flex: 1;
-        min-width: 220px;
+        min-width: 240px;
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 5px;
     }
     .vision-meter-labels {
         display: flex;
         justify-content: space-between;
-        font-size: 0.80rem;
+        font-size: 0.78rem;
         color: var(--vision-text-secondary);
     }
     .vision-meter-labels strong {
         color: #FFFFFF;
     }
     .vision-meter-track {
-        height: 8px;
-        background: rgba(15, 21, 53, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        height: 7px;
+        background: rgba(15, 21, 53, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.06);
         border-radius: 999px;
         overflow: hidden;
     }
     .vision-meter-fill-pass {
         height: 100%;
-        background: linear-gradient(90deg, #0075FF 0%, #01B574 100%);
+        background: linear-gradient(90deg, #0075FF 0%, #10b981 100%);
         border-radius: 999px;
-        box-shadow: 0px 0px 8px rgba(1, 181, 116, 0.6);
+        box-shadow: 0px 0px 6px rgba(1, 181, 116, 0.5);
     }
     .vision-meter-fill-fail {
         height: 100%;
-        background: linear-gradient(90deg, #F5A623 0%, #E31A1A 100%);
+        background: linear-gradient(90deg, #f97316 0%, #ef4444 100%);
         border-radius: 999px;
-        box-shadow: 0px 0px 8px rgba(227, 26, 26, 0.6);
+        box-shadow: 0px 0px 6px rgba(227, 26, 26, 0.5);
     }
     .vision-verdict-right {
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        font-size: 0.80rem;
+        gap: 3px;
+        font-size: 0.76rem;
         color: var(--vision-text-secondary);
     }
     .vision-stat-item {
         display: flex;
-        gap: 6px;
+        gap: 4px;
         align-items: baseline;
     }
     .vision-stat-val {
@@ -942,39 +1075,41 @@ _render_html(
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding-bottom: 8px;
-        margin-bottom: 8px;
+        padding-bottom: 10px;
+        margin-bottom: 10px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-        font-size: 0.82rem;
+        font-size: 0.80rem;
         font-weight: 700;
         color: #FFFFFF;
     }
     .vision-tag-neon {
         font-family: var(--vision-font-mono);
-        font-size: 0.70rem;
+        font-size: 0.66rem;
         font-weight: 700;
-        padding: 2px 8px;
-        border-radius: 6px;
-        background: rgba(0, 117, 255, 0.15);
-        border: 1px solid rgba(0, 117, 255, 0.35);
+        padding: 3px 8px;
+        border-radius: 5px;
+        background: rgba(0, 117, 255, 0.18);
+        border: 1px solid rgba(0, 117, 255, 0.38);
         color: #60a5fa;
     }
     .vision-tag-pass {
-        background: rgba(1, 181, 116, 0.15);
-        border: 1px solid rgba(1, 181, 116, 0.35);
+        background: rgba(1, 181, 116, 0.18);
+        border: 1px solid rgba(1, 181, 116, 0.38);
         color: #34d399;
     }
     .vision-tag-fail {
-        background: rgba(227, 26, 26, 0.15);
-        border: 1px solid rgba(227, 26, 26, 0.35);
+        background: rgba(227, 26, 26, 0.18);
+        border: 1px solid rgba(227, 26, 26, 0.38);
         color: #f87171;
     }
     .vision-panel-footer {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-top: 6px;
-        font-size: 0.74rem;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.04);
+        font-size: 0.72rem;
         color: var(--vision-text-secondary);
     }
 
@@ -1005,52 +1140,61 @@ _render_html(
         border-radius: 999px;
     }
 
-    /* Card de Suporte / Documentação na Sidebar */
+    /* Card de Suporte / Documentação na Sidebar - REDESENHA */
     .vision-sidebar-docs {
-        background: linear-gradient(127deg, rgba(6, 11, 40, 0.90) 0%, rgba(10, 14, 35, 0.85) 100%);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: var(--vision-radius-card);
-        padding: 16px;
-        margin-top: 24px;
-        box-shadow: var(--vision-shadow);
+        background: linear-gradient(135deg, rgba(0, 117, 255, 0.08) 0%, rgba(10, 21, 53, 0.6) 100%);
+        border: 1px solid rgba(0, 117, 255, 0.20);
+        border-radius: 10px;
+        padding: 11px 12px;
+        margin-top: 8px;
+        box-shadow: none;
         position: relative;
         overflow: hidden;
     }
     .vision-sidebar-docs-art {
-        margin-bottom: 10px;
+        margin-bottom: 6px;
         display: flex;
         align-items: center;
         justify-content: center;
-        opacity: 0.85;
+        opacity: 0.95;
+        height: 30px;
     }
     .vision-sidebar-docs-title {
-        font-size: 0.85rem;
+        font-size: 0.75rem;
         font-weight: 700;
         color: #FFFFFF;
-        margin-bottom: 4px;
+        margin-bottom: 2px;
     }
     .vision-sidebar-docs-desc {
-        font-size: 0.72rem;
-        color: var(--vision-text-secondary);
-        line-height: 1.4;
-        margin-bottom: 12px;
+        font-size: 0.67rem;
+        color: #9DAFC1;
+        line-height: 1.32;
+        margin-bottom: 7px;
     }
     .vision-sidebar-docs-btn {
         display: block;
         text-align: center;
-        background: rgba(15, 21, 53, 0.8);
-        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: linear-gradient(135deg, #087CFF 0%, #0A6AD8 100%);
+        border: 1px solid rgba(0, 117, 255, 0.4);
         color: #FFFFFF;
-        font-size: 0.74rem;
+        font-size: 0.68rem;
         font-weight: 700;
-        padding: 8px 12px;
-        border-radius: var(--vision-radius-inner);
+        padding: 7px 10px;
+        border-radius: 6px;
         text-decoration: none;
         transition: all 0.15s ease;
+        box-shadow: 0px 2px 8px rgba(8, 124, 255, 0.25);
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        font-family: var(--vision-font);
+        cursor: pointer;
+        width: 100%;
+        box-sizing: border-box;
     }
     .vision-sidebar-docs-btn:hover {
-        background: rgba(0, 117, 255, 0.25);
-        border-color: rgba(0, 117, 255, 0.5);
+        background: linear-gradient(135deg, #0A8AFF 0%, #087CFF 100%);
+        box-shadow: 0px 4px 12px rgba(8, 124, 255, 0.4);
+        transform: translateY(-1px);
     }
 
     /* Tabela de Atividades Vision UI */
@@ -1185,16 +1329,16 @@ def load_benchmark_report(category: str) -> Optional[dict]:
 # -----------------------------------------------------------------------------
 _render_html(
     """
-    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
-        <div style="width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, #0075FF 0%, #1753FF 100%); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0, 117, 255, 0.4);">
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid rgba(0, 117, 255, 0.10);">
+        <div style="width: 32px; height: 32px; border-radius: 6px; background: linear-gradient(135deg, #087CFF 0%, #0A6AD8 100%); display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 10px rgba(8, 124, 255, 0.3);">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
                 <circle cx="12" cy="12" r="3"></circle>
             </svg>
         </div>
         <div>
-            <div style="font-size: 0.95rem; font-weight: 800; color: #FFFFFF; letter-spacing: 0.04em;">VISION UI</div>
-            <div style="font-size: 0.68rem; font-weight: 600; color: #A0AEC0; text-transform: uppercase;">MACHINE VISION</div>
+            <div style="font-size: 0.92rem; font-weight: 800; color: #FFFFFF; letter-spacing: 0.03em;">VISION UI</div>
+            <div style="font-size: 0.65rem; font-weight: 600; color: #8DA0B8; text-transform: uppercase; letter-spacing: 0.01em;">Machine Vision</div>
         </div>
     </div>
     """,
@@ -1209,7 +1353,7 @@ category = st.sidebar.selectbox(
     options=sorted_categories,
     index=0,
     format_func=format_category_option,
-    help="Selecione o tipo de peça para inspeção óptica. Novas classes treinadas ficam disponíveis automaticamente.",
+    help="Selecione o tipo de peça para inspeção óptica.",
 )
 
 category_ready = is_category_ready(category)
@@ -1220,7 +1364,7 @@ if profiles:
         "Modo de Velocidade:",
         options=list(profiles.keys()),
         index=0,
-        help="Ultra Rápido: esteiras velozes (< 50 ms puro IA). Alta Precisão: auditoria fina de superfície.",
+        help="Selecione o perfil de velocidade.",
     )
     weights_file, onnx_file, default_engine, active_profile_key = profiles[selected_profile_label]
     model = load_trained_model(weights_file, engine_type=default_engine, onnx_path=onnx_file)
@@ -1246,7 +1390,7 @@ threshold = st.sidebar.slider(
     step=0.01,
     key=f"threshold_slider_{category}_{active_profile_key}",
     disabled=(model is None),
-    help="Se o Índice de Irregularidade ultrapassar este limite, a peça será REJEITADA.",
+    help="Limite de rejeição.",
 )
 
 # Parâmetros morfológicos e de segmentação espacial calibrados (Anti-Bleeding + Histerese + Otsu)
@@ -1285,10 +1429,10 @@ _render_html(
     """
     <div class="vision-sidebar-docs">
         <div class="vision-sidebar-docs-art">
-            <svg width="64" height="40" viewBox="0 0 100 60" fill="none">
+            <svg width="48" height="32" viewBox="0 0 100 60" fill="none">
                 <path d="M10 50 Q 30 10, 50 35 T 90 20" stroke="url(#sidebar_glow)" stroke-width="3" fill="none"></path>
-                <circle cx="50" cy="35" r="4" fill="#0075FF"></circle>
-                <circle cx="90" cy="20" r="4" fill="#01B574"></circle>
+                <circle cx="50" cy="35" r="3" fill="#0075FF"></circle>
+                <circle cx="90" cy="20" r="3" fill="#01B574"></circle>
                 <defs>
                     <linearGradient id="sidebar_glow" x1="0" y1="0" x2="100" y2="60" gradientUnits="userSpaceOnUse">
                         <stop stop-color="#0075FF"></stop>
@@ -1299,7 +1443,7 @@ _render_html(
         </div>
         <div class="vision-sidebar-docs-title">Documentação Técnica</div>
         <div class="vision-sidebar-docs-desc">Consulte a especificação de engenharia, arquitetura de inferência e laudos de homologação.</div>
-        <a href="#modo-tecnico" class="vision-sidebar-docs-btn">DOCUMENTAÇÃO</a>
+        <button class="vision-sidebar-docs-btn" style="cursor: pointer; text-decoration: none;">Ver Documentação</button>
     </div>
     """,
     sidebar=True,
@@ -1704,7 +1848,7 @@ if active_image is not None:
     # -------------------------------------------------------------------------
     # Ações Operacionais: Contestação (Active Learning) & Laudo Técnico (PDF)
     # -------------------------------------------------------------------------
-    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
     rnc_source = uploaded_image if uploaded_image is not None else selected_img_path
     rnc_sha256 = compute_image_sha256(rnc_source if rnc_source is not None else img_rgb)
     rnc_piece_id = f"{current_pos:03d}_{rnc_sha256[:6]}" if uploaded_image is None else f"upload_{rnc_sha256[:6]}"
@@ -1844,7 +1988,7 @@ if active_image is not None:
     # -------------------------------------------------------------------------
     # Modo Técnico / Auditoria de Engenharia (Centralizador de Métricas & Telemetria)
     # -------------------------------------------------------------------------
-    st.markdown("<div style='height: 14px;' id='modo-tecnico'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 10px;' id='modo-tecnico'></div>", unsafe_allow_html=True)
     with st.expander("Modo Técnico & Auditoria de Engenharia", expanded=False):
         st.caption(
             "Painel executivo para engenharia de qualidade e auditoria estatística. Todos os parâmetros, KPIs, gráficos de telemetria e perfis de latência refletem diretamente o modelo carregado em memória."
